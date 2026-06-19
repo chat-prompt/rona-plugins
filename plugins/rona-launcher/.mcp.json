@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rona": {
+      "type": "http",
+      "url": "https://rona.so/api/mcp"
+    }
+  }
+}
