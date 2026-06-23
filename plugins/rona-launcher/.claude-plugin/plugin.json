@@ -1,7 +1,7 @@
 {
   "name": "rona-launcher",
   "description": "Rona 맞춤 실습을 Claude Code 안에서 받아 수행하는 얇은 런처. rona MCP의 get_practice로 실습을 가져와 그 자리에서 진행합니다.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "Geniefy"
   },
