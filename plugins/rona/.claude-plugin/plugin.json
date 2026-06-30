@@ -1,7 +1,7 @@
 {
   "name": "rona",
   "description": "Rona 맞춤 실습을 Claude Code 안에서 받아 수행하는 얇은 런처. rona MCP의 get_practice로 실습을 가져와 그 자리에서 진행합니다.",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "author": {
     "name": "Geniefy"
   },
@@ -12,7 +12,8 @@
       "type": "string",
       "title": "실습 토큰",
       "description": "설치할 맞춤 실습의 install token. Rona 설치 페이지에서 받은 명령에 이미 채워져 있습니다.",
-      "required": false
+      "required": false,
+      "default": ""
     }
   }
 }
