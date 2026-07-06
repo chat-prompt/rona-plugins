@@ -1,13 +1,13 @@
 {
-  "description": "Rona 맞춤 실습 진행 게이트 — 턴 종료 시 진행/완료 전송 누락을 검사해 재턴을 유도 (F2a spike stub)",
+  "description": "Rona 맞춤 실습 진행 게이트 — 턴 종료 시 진행/완료 전송 누락을 검사해 재턴을 유도",
   "hooks": {
     "Stop": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/checkpoint-gate.sh",
-            "args": ["${user_config.practice_token}"],
+            "command": "bash",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/checkpoint-gate.sh", "${user_config.practice_token}"],
             "timeout": 30
           }
         ]
