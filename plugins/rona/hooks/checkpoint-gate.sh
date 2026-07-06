@@ -49,7 +49,15 @@ if [ "$CALLS" -gt 0 ] 2>/dev/null; then
   exit 0   # 이미 진행/완료가 기록됨 → 통과.
 fi
 
+# --- 4b. 세션 스코프: 로나 MCP 호출 흔적이 0건이면 로나 실습 세션이 아님 → 개입 금지(fail-open). ---
+# 플러그인은 user-scope 설치라 로나와 무관한 세션에도 로드됨. 로나 도구 사용 흔적이 있어야만 게이트한다.
+RONA_CALLS="$(grep -cE '"name":"mcp__plugin_rona_rona__[^"]*"' "$TP" 2>/dev/null)"
+[ -z "$RONA_CALLS" ] && RONA_CALLS=0
+[ "$RONA_CALLS" -gt 0 ] 2>/dev/null || exit 0
+
 # --- 5. block 1회 (전송 미완). ---
+# 가드파일 경로 미해소(SID/CLAUDE_PLUGIN_DATA 공백)면 세션당 1회 캡 보장 불가 → 넛지 포기 = fail-open (헤더 L9 계약).
+[ -z "$GUARD" ] && exit 0
 # 카운터를 먼저 세운다. (쓰기 실패해도 다음 fire 는 stop_hook_active 가 막으므로 fail-open.)
 if [ -n "$GUARD" ]; then
   mkdir -p "$DATA_DIR" 2>/dev/null || true
