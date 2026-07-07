@@ -36,7 +36,7 @@ rona MCP의 `list_topics` 를 호출한다(인자 없음). 반환된 `{ slug, ti
 **(B) 분할 전달** — `{ install_token, shell_md, references }`: 긴 실습을 셸 + 참고파일로 나눠 준 것이다. 다음 순서로 처리한다.
 1. `shell_md` 를 `.claude/skills/rona-active/SKILL.md` 로 쓴다.
 2. `references` 의 각 항목을 `.claude/skills/rona-active/<path>` 로 쓴다 (각 항목의 `path` 그대로 — 예: `references/step-1.md`, `references/research.md`). 상위 디렉토리가 없으면 만든다.
-3. 그 뒤 방금 쓴 `SKILL.md`(셸) 를 읽고, 그 지침·스텝 인덱스대로 진행한다. 셸이 "Step N 상세는 `references/step-N.md` 를 읽고 진행" 이라고 가리키면, 그 단계에 이르렀을 때 그 파일을 읽어 이어간다 (미리 다 읽지 않고 필요할 때만).
+3. `shell_md`(방금 쓴 `SKILL.md`) 와 **모든 `references` 를 설치 직후 한 번에 다 읽어** 세팅한다 — 셸의 지침·스텝 인덱스와 각 `references/step-N.md`(및 있으면 `research.md`)를 지금 전부 읽어둔 뒤 진행한다. 진행 중에는 파일을 더 받아오거나 스텝마다 나눠 읽지 않는다(설치 시 셸+참고파일을 이미 한 번에 내려받아 전부 기록·로드했으니, 스텝 진행은 로컬 메모리에서 이어진다).
 
 - 지침·§5 추적은 셸(SKILL.md)에 상주하니 대화가 길어져도 항상 지켜진다.
 - 어느 형태든 실습의 단계·도구·체크포인트·추적 방식은 받아온 내용이 정한다. 이 런처는 그것을 대신 판단하거나 바꾸지 않는다.
