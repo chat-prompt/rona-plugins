@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "rona": {
+      "type": "http",
+      "url": "https://rona.so/api/mcp",
+      "headers": {
+        "X-Rona-Launcher-Version": "alpha-0.1.0"
+      }
+    }
+  }
+}

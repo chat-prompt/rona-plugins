@@ -17,6 +17,15 @@
       "author": {
         "name": "Geniefy"
       }
+    },
+    {
+      "name": "rona-alpha",
+      "source": "./plugins/rona-alpha",
+      "description": "Rona 주제 추천 런처 (알파). 어드민이 골라둔 주제 스킬을 골라 내 계정으로 받아 수행합니다. 임직원·챌린지 참여자용 개발/검증 플러그인.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Geniefy"
+      }
     }
   ]
 }
