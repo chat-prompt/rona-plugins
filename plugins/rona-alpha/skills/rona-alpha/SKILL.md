@@ -24,22 +24,30 @@ rona MCP의 `list_topics` 를 호출한다(인자 없음). 반환된 `{ slug, ti
 사용자가 하나를 고르면 rona MCP의 `claim_topic` 을 호출한다. 인자 `slug` = 고른 주제의 slug, `platform` = "claude_code".
 
 - 발급은 **로그인한 내 계정**에 묶인다. 자격이 안 되면(임직원/챌린지 참여자가 아니면) `claim_topic` 이 안내 메시지를 반환하니 그 내용을 그대로 전하고 멈춘다. 토큰을 지어내거나 추측하지 않는다.
-- 성공하면 `install_token` 이 돌아온다. 이 토큰으로 `get_practice` 를 호출한다 — 인자 `installToken` 에 그 값을 그대로 넣는다.
+- 성공하면 `install_token` 이 돌아온다. 이 토큰으로 §3 에서 실습 본문을 곧장 내려받는다.
 - 토큰·발급 상태 같은 내부 사정은 사용자에게 내레이션하지 말고, 받아온 실습으로 곧장 이어간다.
 
-## 3. 받은 주제 진행
+## 3. 받은 주제 설치·진행
 
-`get_practice` 응답은 두 형태로 온다.
+`install_token` 으로 실습 본문을 로컬에 내려받아 그 지침대로 진행한다. 받는 방식은 **모델이 본문을 다시 타이핑하지 않고 `curl` 로 네트워크에서 파일을 바로 저장**하는 것이 기본이다 — 셸 재생성 없이 한 번에 설치된다(수십 KB 본문도 즉시).
 
-**(A) 단일 본문** — `{ install_token, skill_md }`: `skill_md` 전체가 이번 실습의 지침이다. 그대로 읽고 사용자와 함께 진행한다.
+1. Bash 로 단일 파일을 받는다:
 
-**(B) 분할 전달** — `{ install_token, shell_md, references }`: 긴 실습을 셸 + 참고파일로 나눠 준 것이다. 다음 순서로 처리한다.
-1. `shell_md` 를 `.claude/skills/rona-active/SKILL.md` 로 쓴다.
-2. `references` 의 각 항목을 `.claude/skills/rona-active/<path>` 로 쓴다 (각 항목의 `path` 그대로 — 예: `references/step-1.md`, `references/research.md`). 상위 디렉토리가 없으면 만든다.
-3. `shell_md`(방금 쓴 `SKILL.md`) 와 **모든 `references` 를 설치 직후 한 번에 다 읽어** 세팅한다 — 셸의 지침·스텝 인덱스와 각 `references/step-N.md`(및 있으면 `research.md`)를 지금 전부 읽어둔 뒤 진행한다. 진행 중에는 파일을 더 받아오거나 스텝마다 나눠 읽지 않는다(설치 시 셸+참고파일을 이미 한 번에 내려받아 전부 기록·로드했으니, 스텝 진행은 로컬 메모리에서 이어진다).
+   ```bash
+   mkdir -p .claude/skills/rona-active
+   curl -fsSL "https://rona.so/skill/api/install/<install_token>" \
+     -o .claude/skills/rona-active/SKILL.md
+   ```
 
-- 지침·§5 추적은 셸(SKILL.md)에 상주하니 대화가 길어져도 항상 지켜진다.
-- 어느 형태든 실습의 단계·도구·체크포인트·추적 방식은 받아온 내용이 정한다. 이 런처는 그것을 대신 판단하거나 바꾸지 않는다.
+   `<install_token>` 자리에는 `claim_topic` 이 준 값을 그대로 넣는다.
+
+2. 방금 쓴 `.claude/skills/rona-active/SKILL.md` 를 읽고, 그 지침·스텝·§5 추적대로 사용자와 함께 진행한다. 이 단일 파일에 지침·모든 스텝·추적이 전부 인라인돼 있다(참고파일 분할 없음 — 진행 중 추가로 받아올 것이 없다).
+
+- 설치 상태·토큰 같은 내부 사정은 내레이션하지 말고 곧장 실습으로 이어간다.
+- 지침·§5 추적은 이 `SKILL.md` 에 상주하니 대화가 길어져도 항상 지켜진다.
+- 실습의 단계·도구·체크포인트·추적 방식은 받아온 내용이 정한다. 이 런처는 그것을 대신 판단하거나 바꾸지 않는다.
+
+**폴백** — `curl` 이 실패하면(오프라인·비정상 응답) `get_practice`(installToken) 를 호출해, 응답의 `skill_md`(단일 본문) 또는 `shell_md` + `references`(분할)를 `.claude/skills/rona-active/` 아래 같은 경로로 써서 동일하게 진행한다.
 
 ## 후기
 
