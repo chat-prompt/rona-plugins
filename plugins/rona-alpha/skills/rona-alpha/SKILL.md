@@ -29,19 +29,22 @@ rona MCP의 `list_topics` 를 호출한다(인자 없음). 반환된 `{ slug, ti
 
 ## 3. 받은 주제 설치·진행
 
-`install_token` 으로 실습 본문을 로컬에 내려받아 그 지침대로 진행한다. 받는 방식은 **모델이 본문을 다시 타이핑하지 않고 `curl` 로 네트워크에서 파일을 바로 저장**하는 것이 기본이다 — 셸 재생성 없이 한 번에 설치된다(수십 KB 본문도 즉시).
+`install_token` 으로 실습 번들을 로컬에 내려받아 그 지침대로 진행한다. 받는 방식은 **모델이 본문을 다시 타이핑하지 않고 `curl` 로 tar 번들을 받아 그 자리에서 푸는** 것이 기본이다 — 셸 재생성 없이 한 번에 설치된다(수십 KB 본문도 즉시). 번들은 실습별 **고유 폴더 `rona-<토큰 앞 8자>/`** 에 풀리니, 매번 다른 폴더라 이전 실습이 덮여 오염되지 않는다.
 
-1. Bash 로 단일 파일을 받는다:
+1. Bash 로 tar 번들을 받아 푼다:
 
    ```bash
-   mkdir -p .claude/skills/rona-active
-   curl -fsSL "https://rona.so/skill/api/install/<install_token>?launcher=alpha" \
-     -o .claude/skills/rona-active/SKILL.md
+   TOKEN="<install_token>"           # claim_topic 이 준 값
+   DEST=".claude/skills/rona-${TOKEN:0:8}"
+   mkdir -p .claude/skills
+   curl -fsSL "https://rona.so/skill/api/install/${TOKEN}?launcher=alpha&format=tar" \
+     | tar -x -C .claude/skills/
+   # → .claude/skills/rona-<8hex>/SKILL.md + references/step-N.md + research.md
    ```
 
-   `<install_token>` 자리에는 `claim_topic` 이 준 값을 그대로 넣는다.
+   `<install_token>` 자리에는 `claim_topic` 이 준 값을 그대로 넣는다. 서버는 번들 최상위 폴더를 `rona-<install_token 앞 8자 hex>/` 로 이름 짓고, 여기서도 `${TOKEN:0:8}` 로 동일하게 계산하니 `${DEST}` 는 방금 풀린 폴더와 정확히 일치한다.
 
-2. 방금 쓴 `.claude/skills/rona-active/SKILL.md` 를 읽고, **아래 「공통 진행 규칙」을 이 실습에 그대로 적용**해 사용자와 함께 진행한다.
+2. 방금 풀린 `${DEST}/SKILL.md`(얇은 본문) 를 읽고, **아래 「공통 진행 규칙」을 이 실습에 그대로 적용**해 사용자와 함께 진행한다. 진행 중 스텝 상세가 필요하면 그때 `${DEST}/references/step-N.md` 를 읽는다(이제 스텝별로 분리돼 있다).
 
    받은 파일은 *이 작업 고유의 데이터*(제목·배우는 개념·방향 옵션·스텝)와 *토큰 슬롯*(frontmatter `metadata.tracking_token` = §5 추적·§8 후기의 `install_token`)을 담는다. *어떻게 진행하나*(온보딩·폴더 점검·합의·멈춤·마무리·추적)는 아래 공통 규칙이 정한다. 순서: 온보딩 먼저 → Step 0(폴더 점검) → 필요성 확인 → 방향 합의 → 한 번에 한 단계·확인 후 진행 → 결과 합의 → 마무리 이해 확인 → 후기 제안. 이 순서·태도는 주제가 바뀌어도 같다.
 
@@ -50,7 +53,9 @@ rona MCP의 `list_topics` 를 호출한다(인자 없음). 반환된 `{ slug, ti
 - 공통 진행 규칙은 이 런처에 인라인돼 세션에 상주하니, 받은 파일이 얇아도(규칙이 셸에서 빠져도) 대화가 길어질 때까지 항상 지켜진다.
 - 실습의 단계·도구·방향 옵션·§5 토큰은 받아온 내용이 정한다. 이 런처는 그 데이터를 대신 판단하거나 바꾸지 않는다.
 
-**폴백** — `curl` 이 실패하면(오프라인·비정상 응답) `get_practice`(installToken) 를 호출해, 응답의 `skill_md`(단일 본문) 또는 `shell_md` + `references`(분할)를 `.claude/skills/rona-active/` 아래 같은 경로로 써서 동일하게 진행한다.
+**폴백** — `curl`·`tar` 이 실패하면(오프라인·비정상 응답) `get_practice`(installToken) 를 호출해, 응답의 `shell_md` + `references[]`(분할) 를 **같은 `${DEST}/` 아래 같은 경로**(`${DEST}/SKILL.md` + `${DEST}/references/…`)로 써서 동일하게 진행한다. 단일 `skill_md` 만 오면 `${DEST}/SKILL.md` 하나로 쓴다.
+
+**오래된 폴더 정리** — 여러 실습을 받으면 `.claude/skills/rona-<8hex>/` 폴더가 하나씩 쌓인다. 진행 중인 것만 두고, 다 쓴 오래된 폴더는 지워도 된다(런처가 자동으로 지우지는 않는다).
 
 ## 공통 진행 규칙 (받은 실습을 진행할 때 반드시 따른다)
 
