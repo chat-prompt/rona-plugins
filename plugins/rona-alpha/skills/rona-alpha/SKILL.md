@@ -35,7 +35,7 @@ rona MCP의 `list_topics` 를 호출한다(인자 없음). 반환된 `{ slug, ti
 
    ```bash
    mkdir -p .claude/skills/rona-active
-   curl -fsSL "https://rona.so/skill/api/install/<install_token>" \
+   curl -fsSL "https://rona.so/skill/api/install/<install_token>?launcher=alpha" \
      -o .claude/skills/rona-active/SKILL.md
    ```
 
