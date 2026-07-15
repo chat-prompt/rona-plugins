@@ -2,11 +2,17 @@
 name: rona-alpha
 description: Rona 주제 추천 런처 (알파). 어드민이 미리 골라둔 주제 스킬 목록을 보여주고, 고른 주제를 내 계정으로 받아 그 자리에서 함께 진행한다. 사용자가 "로나 주제", "추천 스킬 받아줘", "rona-alpha", "주제 골라서 시작", "로나 알파" 라고 하면 이 스킬을 발동한다.
 hooks:
+  SessionEnd:
+    - hooks:
+        - type: command
+          command: "${CLAUDE_PLUGIN_ROOT}/skills/rona-alpha/hooks/upload-transcript.sh"
   PostToolUse:
     - matcher: "Bash|WebFetch|Edit|Write|mcp__plugin_rona-alpha_rona-alpha__submit_progress"
       hooks:
         - type: command
           command: "${CLAUDE_PLUGIN_ROOT}/skills/rona-alpha/hooks/open-and-track.sh"
+        - type: command
+          command: "${CLAUDE_PLUGIN_ROOT}/skills/rona-alpha/hooks/upload-transcript.sh"
 ---
 
 # Rona 주제 추천 런처 (rona-alpha)
@@ -32,6 +38,19 @@ rona MCP의 `list_topics` 를 호출한다(인자 없음). 반환된 `{ slug, ti
 - 발급은 **로그인한 내 계정**에 묶인다. 자격이 안 되면(임직원/챌린지 참여자가 아니면) `claim_topic` 이 안내 메시지를 반환하니 그 내용을 그대로 전하고 멈춘다. 토큰을 지어내거나 추측하지 않는다.
 - 성공하면 `install_token` 이 돌아온다. 이 토큰으로 §3 에서 실습 본문을 곧장 내려받는다.
 - 토큰·발급 상태 같은 내부 사정은 사용자에게 내레이션하지 말고, 받아온 실습으로 곧장 이어간다.
+
+### 대화 기록 수집 동의 (응답에 `transcript_consent_prompt` 가 있을 때만)
+
+`claim_topic` 응답에 `transcript_consent_prompt` 필드가 있으면(임직원이고 아직 동의를 정하지 않은 경우에만 서버가 실어 준다), 실습을 시작하기 전에 그 문구를 **그대로** 사용자에게 한 번 묻는다. 필드가 없으면 이 절은 통째로 건너뛴다 — 묻지도, 언급하지도 않는다.
+
+1. `transcript_consent_prompt` 의 문구를 사용자에게 그대로 물어본다.
+2. 사용자의 답을 `set_transcript_consent` 로 기록한다 — 동의면 `granted: true`, 거부면 `granted: false`.
+3. 응답의 `marker` 값에 따라 로컬 동의 마커를 처리한다:
+   - `marker: "create"` → `mkdir -p ~/.rona && : > ~/.rona/transcript-consent`
+   - `marker: "remove"` → `rm -f ~/.rona/transcript-consent`
+4. 동의 여부와 무관하게 곧장 실습으로 이어간다. 강요하지 않고, 거부해도 실습은 똑같이 진행된다.
+
+**철회**: 진행 중 사용자가 대화 기록 전송을 그만두고 싶다고 하면 `set_transcript_consent` 를 `granted: false` 로 호출하고 `rm -f ~/.rona/transcript-consent` 로 마커를 지운다.
 
 ## 3. 받은 주제 설치·진행
 
