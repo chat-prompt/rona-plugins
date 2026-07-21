@@ -79,6 +79,7 @@ CONSENT_MARKER="$HOME/.rona/transcript-consent"
 TOKEN_MARKER="$SESS_DIR/${SESSION_ID}.token"
 UPLOAD_MARKER="$SESS_DIR/${SESSION_ID}.transcript"          # mtime = 마지막 시도 시각(스로틀)
 RESULT_MARKER="$SESS_DIR/${SESSION_ID}.transcript-result"   # 런처가 읽어 사용자에게 전할 결과
+EXCLUDE_MARKER="$SESS_DIR/${SESSION_ID}.no-send"            # 있으면 이 세션만 전송 제외(계정 동의와 별개)
 
 # 결과 1줄 기록(런처가 읽는 유일한 표면). 값은 전부 우리가 만든 토큰·정수뿐.
 write_result() {
@@ -95,6 +96,14 @@ write_result() {
 # ── 전제 게이트 ─────────────────────────────────────────────────────────────
 [ -f "$TOKEN_MARKER" ] || exit 0                    # install_token 마커(open-and-track.sh 가 조달)
 [ -n "$TRANSCRIPT_PATH" ] || exit 0
+
+# 세션 제외: 이 세션만 빼달라(민감 세션)는 표시. 계정 동의(granted)와 별개로, 이 세션은
+# 절대 보내지 않는다. 스로틀 선점보다 앞에 둬 exclude 세션은 마커도 안 남기고 조용히
+# 빠진다. 결과는 남겨 런처가 "이 세션은 제외됨"을 확인할 수 있게 한다.
+if [ -f "$EXCLUDE_MARKER" ]; then
+  write_result "excluded"
+  exit 0
+fi
 
 # 경로 제한: $HOME/.claude/ 하위 .jsonl 만. 상위 탈출(..) 은 무조건 거부.
 case "$TRANSCRIPT_PATH" in
