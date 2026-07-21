@@ -80,6 +80,7 @@ TOKEN_MARKER="$SESS_DIR/${SESSION_ID}.token"
 UPLOAD_MARKER="$SESS_DIR/${SESSION_ID}.transcript"          # mtime = 마지막 시도 시각(스로틀)
 RESULT_MARKER="$SESS_DIR/${SESSION_ID}.transcript-result"   # 런처가 읽어 사용자에게 전할 결과
 EXCLUDE_MARKER="$SESS_DIR/${SESSION_ID}.no-send"            # 있으면 이 세션만 전송 제외(계정 동의와 별개)
+OFFSET_MARKER="$SESS_DIR/${SESSION_ID}.offset"             # 마지막으로 서버에 보낸 raw 바이트(증분 전송 시작점)
 
 # 결과 1줄 기록(런처가 읽는 유일한 표면). 값은 전부 우리가 만든 토큰·정수뿐.
 write_result() {
@@ -140,33 +141,50 @@ if [ ! -f "$CONSENT_MARKER" ]; then
   exit 0
 fi
 
-# 압축 전 크기(서버가 skip 근거로 함께 기록).
+# 현재 파일 전체 크기(raw).
 BYTES="$(wc -c < "$TRANSCRIPT_PATH" 2>/dev/null | tr -cd '0-9')"
 [ -n "$BYTES" ] || exit 0
+
+# ── 증분(delta) 시작점 계산 ─────────────────────────────────────────────────
+# OFFSET = 지난번에 서버로 보낸 raw 바이트(= 서버 저장 bytes). 세션 jsonl 은 뒤로만
+# 자라므로 OFFSET 이후 새로 붙은 부분만 보낸다. 마커가 없으면 0(첫 전송=전체 리셋).
+OFFSET="$(cat "$OFFSET_MARKER" 2>/dev/null | tr -cd '0-9')"
+[ -n "$OFFSET" ] || OFFSET=0
+# 파일이 offset 보다 작아졌으면(축소·회전) 처음부터 다시 — 리셋으로 복구.
+[ "$OFFSET" -gt "$BYTES" ] 2>/dev/null && OFFSET=0
+# 새로 붙은 게 없으면(=이미 다 보냄) 조용히 끝낸다 — 빈 전송 안 한다.
+[ "$OFFSET" -eq "$BYTES" ] 2>/dev/null && exit 0
+# 이 조각(delta)의 raw 크기.
+DELTA_RAW=$((BYTES - OFFSET))
 
 TOKEN="$(cat "$TOKEN_MARKER" 2>/dev/null | tr -d '[:space:]')"
 is_uuid "$TOKEN" || exit 0                             # W4: 마커 토큰 재검증
 
 BASE="https://rona.so/skill/api/transcript/${TOKEN}"
 
-# gzip 후 상한 4.5MB — 서버 바디 캡과 같은 값.
+# gzip 후 상한 4.5MB — 서버 바디 캡과 같은 값. 이제 조각(delta) 하나당 상한이라 긴
+# 세션도 여기 안 걸린다(전체가 아니라 새로 붙은 부분만 보내므로).
 MAX_GZ=4718592
 
 if [ -n "$RONA_HOOK_DRYRUN" ]; then
   # 토큰은 찍지 않는다(로그·화면 유출 차단) — 경로는 자리표시자로.
-  echo "HANDSHAKE POST ${BASE%/*}/<token>/handshake BODY={\"session_id\":\"${SESSION_ID}\",\"bytes\":${BYTES},\"gz_bytes\":<gz>}"
-  echo "UPLOAD PUT ${BASE%/*}/<token>/upload?session_id=${SESSION_ID}&bytes=${BYTES} (gzip ${TRANSCRIPT_PATH})"
+  echo "DELTA offset=${OFFSET} bytes=${BYTES} delta_raw=${DELTA_RAW}"
+  echo "HANDSHAKE POST ${BASE%/*}/<token>/handshake BODY={\"session_id\":\"${SESSION_ID}\",\"bytes\":${DELTA_RAW},\"gz_bytes\":<gz>}"
+  echo "UPLOAD PUT ${BASE%/*}/<token>/upload?session_id=${SESSION_ID}&bytes=${DELTA_RAW}&offset=${OFFSET} (gzip tail +${OFFSET} ${TRANSCRIPT_PATH})"
   exit 0
 fi
 
 # ── 백그라운드 (도구 흐름 비차단) ───────────────────────────────────────────
-#   1) gzip 먼저 → 압축 후 크기로 한도 판정.
-#   2) 초과면 handshake 에 skip_reason 만 실어 결손 기록(업로드 없음).
-#   3) 아니면 handshake preflight(200) 통과 시에만 PUT.
+#   1) OFFSET 이후 새 부분만 잘라 gzip → 조각 크기로 한도 판정.
+#   2) 조각이 상한 초과면(드묾) handshake 에 skip_reason 만 실어 결손 기록.
+#   3) 아니면 handshake preflight(200) 통과 시에만 PUT(offset 실어).
+#   4) 200 → OFFSET_MARKER 를 BYTES 로 갱신(다음 시작점). 409(offset 불일치) →
+#      OFFSET_MARKER=0 리셋(다음 발사 때 전체 재전송으로 자가복구).
 #   실패는 전부 삼키되 결과 마커에는 남긴다. 임시 gz 는 항상 정리.
 (
   tmp_gz="$(mktemp 2>/dev/null)" || exit 0
-  if ! gzip -c "$TRANSCRIPT_PATH" > "$tmp_gz" 2>/dev/null; then
+  # OFFSET 이후만 잘라 gzip. tail -c +N 은 N 번째 바이트부터(1-기반)라 +$((OFFSET+1)).
+  if ! tail -c "+$((OFFSET + 1))" "$TRANSCRIPT_PATH" 2>/dev/null | gzip -c > "$tmp_gz" 2>/dev/null; then
     rm -f "$tmp_gz" 2>/dev/null
     write_result "failed" "step=gzip"
     exit 0
@@ -181,7 +199,7 @@ fi
   if [ "$GZ_BYTES" -gt "$MAX_GZ" ]; then
     curl -fsS -m 10 -o /dev/null \
       -X POST -H 'Content-Type: application/json' \
-      -d "{\"session_id\":\"${SESSION_ID}\",\"bytes\":${BYTES},\"gz_bytes\":${GZ_BYTES},\"skip_reason\":\"too_large\"}" \
+      -d "{\"session_id\":\"${SESSION_ID}\",\"bytes\":${DELTA_RAW},\"gz_bytes\":${GZ_BYTES},\"skip_reason\":\"too_large\"}" \
       "${BASE}/handshake" >/dev/null 2>&1
     rm -f "$tmp_gz" 2>/dev/null
     write_result "too_large" "gz_bytes=${GZ_BYTES} limit=${MAX_GZ}"
@@ -190,14 +208,23 @@ fi
 
   code="$(curl -fsS -m 10 -o /dev/null -w '%{http_code}' \
     -X POST -H 'Content-Type: application/json' \
-    -d "{\"session_id\":\"${SESSION_ID}\",\"bytes\":${BYTES},\"gz_bytes\":${GZ_BYTES}}" \
+    -d "{\"session_id\":\"${SESSION_ID}\",\"bytes\":${DELTA_RAW},\"gz_bytes\":${GZ_BYTES}}" \
     "${BASE}/handshake" 2>/dev/null)"
   if [ "$code" = "200" ]; then
-    if curl -fsS -m 60 -o /dev/null \
+    up_code="$(curl -fsS -m 60 -o /dev/null -w '%{http_code}' \
       -X PUT -H 'Content-Type: application/gzip' \
       --data-binary "@${tmp_gz}" \
-      "${BASE}/upload?session_id=${SESSION_ID}&bytes=${BYTES}" >/dev/null 2>&1; then
-      write_result "sent" "gz_bytes=${GZ_BYTES}"
+      "${BASE}/upload?session_id=${SESSION_ID}&bytes=${DELTA_RAW}&offset=${OFFSET}" 2>/dev/null)"
+    if [ "$up_code" = "200" ]; then
+      # 다음 전송 시작점을 현재 파일 끝으로. 이 조각까지 서버에 담겼다.
+      printf '%s' "$BYTES" > "$OFFSET_MARKER" 2>/dev/null
+      chmod 600 "$OFFSET_MARKER" 2>/dev/null
+      write_result "sent" "gz_bytes=${GZ_BYTES} offset=${OFFSET}"
+    elif [ "$up_code" = "409" ]; then
+      # offset 불일치(서버 행 삭제·재claim 드리프트) → 다음엔 전체 리셋으로 복구.
+      printf '0' > "$OFFSET_MARKER" 2>/dev/null
+      chmod 600 "$OFFSET_MARKER" 2>/dev/null
+      write_result "retry" "reason=offset_mismatch"
     else
       write_result "failed" "step=upload"
     fi
