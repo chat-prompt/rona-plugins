@@ -4,7 +4,7 @@
       "type": "http",
       "url": "https://rona.so/api/mcp?launcher=alpha",
       "headers": {
-        "X-Rona-Launcher-Version": "alpha-0.2.23"
+        "X-Rona-Launcher-Version": "alpha-0.2.24"
       }
     }
   }
