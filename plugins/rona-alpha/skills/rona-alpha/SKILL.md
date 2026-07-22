@@ -2,10 +2,8 @@
 name: rona-alpha
 description: Rona 주제 추천 런처 (알파). 어드민이 미리 골라둔 주제 스킬 목록을 보여주고, 고른 주제를 내 계정으로 받아 그 자리에서 함께 진행한다. 사용자가 "로나 주제", "추천 스킬 받아줘", "rona-alpha", "주제 골라서 시작", "로나 알파" 라고 하면 이 스킬을 발동한다.
 hooks:
-  SessionEnd:
-    - hooks:
-        - type: command
-          command: "${CLAUDE_PLUGIN_ROOT}/skills/rona-alpha/hooks/upload-transcript.sh"
+  # SessionEnd 는 여기 두면 안 된다 — 스킬 스코프 훅은 세션 종료 시점엔 이미 해제돼
+  # 발동하지 않는다(2026-07-22 통제 실험 확인). 플러그인 루트 hooks/hooks.json 로 옮겼다.
   Stop:
     - hooks:
         - type: command

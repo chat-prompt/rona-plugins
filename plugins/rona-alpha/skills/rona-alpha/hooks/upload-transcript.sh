@@ -1,20 +1,28 @@
 #!/usr/bin/env bash
 # rona-alpha skill-scoped 트랜스크립트 업로드 훅 — 임직원 동의 수집.
 #
-# 이 스크립트는 rona-alpha 런처 SKILL.md frontmatter 의 SessionEnd + Stop + PostToolUse
-# hook 으로 등록돼, 런처가 활성인 세션(=로나 실습 진행 중)에만 발동한다. stdin 으로 받은
-# hook JSON 의 transcript_path(현 세션 jsonl)를 gzip 해 서버로 올린다.
+# 이 스크립트는 두 곳에 등록된다. stdin 으로 받은 hook JSON 의 transcript_path(현 세션
+# jsonl)를 gzip 해 서버로 올린다.
+#
+#   등록  ①플러그인 루트 hooks/hooks.json → SessionEnd (세션 생명주기, 스코프 무관)
+#         ②런처 SKILL.md frontmatter → Stop + PostToolUse (런처 활성 구간)
 #
 #   발동  SessionEnd(세션 종료 시 최종 1회, 스로틀 면제) + Stop(응답 1턴 끝날 때마다)
 #         + PostToolUse(도구 실행 후). 뒤 둘은 마지막 시도 후 2분 경과 시에만 재업로드
 #         하고, 스로틀은 마커 mtime 으로 판정한다.
 #
-#         SessionEnd 는 세션이 곱게 끝날 때만 온다 — 터미널을 닫거나 프로세스가 죽으면
-#         안 온다. 그래서 백스톱을 SessionEnd 하나에 걸면 급사 시 스로틀 창 하나만큼이
-#         통째로 유실된다(2026-07-21 실측: 마지막 7분 누락). 창을 2분으로 좁혀 손실
-#         상한을 낮추고, Stop 을 더해 도구를 안 쓰고 대화만 이어간 구간도 회수한다
+#         SessionEnd 를 스킬 frontmatter 에 두면 안 된다 — 스킬 스코프 훅은 스킬이 활성인
+#         동안만 등록되고 세션 종료 시점엔 이미 해제돼 **한 번도 발동하지 않는다**
+#         (2026-07-22 통제 실험: 같은 세션에서 settings/플러그인 레벨은 발동, 스킬 레벨은
+#         미발동). 그래서 백스톱이 없는 채로 굴러갔고, 세션 3/3 에서 마지막 훅 실행이 세션
+#         종료보다 앞섰다(간극 3분31초~19분50초). 2026-07-21 실측 누락 7분25초·1분.
+#
+#         스코프는 이 스크립트의 토큰 마커 게이트가 잡는다 — 로나와 무관한 세션은 마커가
+#         없어 즉시 종료하므로, 플러그인 레벨에 둬도 남의 세션에 손대지 않는다.
+#
+#         Stop 을 함께 두는 이유: 도구를 안 쓰고 대화만 이어간 구간도 회수하기 위함
 #         (PostToolUse matcher 는 Bash·Edit·Write 등에만 걸려 대화만 하면 안 뜬다).
-#         창을 좁힐 수 있는 건 이제 전송이 증분(delta)이라 한 번에 보내는 양이 작아서다.
+#         스로틀 2분은 급사 시 손실 상한 — 전송이 증분(delta)이라 좁혀도 부담이 없다.
 #   전제  ①install_token 마커 존재 ②transcript_path 가 허용 경로의 실제 파일
 #         ③동의 마커 ~/.rona/transcript-consent 존재. ①② 불충족은 조용히 종료.
 #   서버  handshake(게이트 3종 preflight) 통과 시에만 upload. 서버가 본 방어선 — 이 훅은
