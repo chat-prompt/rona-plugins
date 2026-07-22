@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 # rona-alpha skill-scoped 트랜스크립트 업로드 훅 — 임직원 동의 수집.
 #
-# 이 스크립트는 rona-alpha 런처 SKILL.md frontmatter 의 SessionEnd + PostToolUse hook
-# 으로 등록돼, 런처가 활성인 세션(=로나 실습 진행 중)에만 발동한다. stdin 으로 받은 hook
-# JSON 의 transcript_path(현 세션 jsonl)를 gzip 해 서버로 올린다.
+# 이 스크립트는 rona-alpha 런처 SKILL.md frontmatter 의 SessionEnd + Stop + PostToolUse
+# hook 으로 등록돼, 런처가 활성인 세션(=로나 실습 진행 중)에만 발동한다. stdin 으로 받은
+# hook JSON 의 transcript_path(현 세션 jsonl)를 gzip 해 서버로 올린다.
 #
-#   발동  SessionEnd(세션 종료 시 최종 1회) + PostToolUse(마지막 시도 후 10분 경과 시
-#         재업로드 — 세션이 곱게 안 끝나도 근사 회수). 스로틀은 마커 mtime 으로 판정.
+#   발동  SessionEnd(세션 종료 시 최종 1회, 스로틀 면제) + Stop(응답 1턴 끝날 때마다)
+#         + PostToolUse(도구 실행 후). 뒤 둘은 마지막 시도 후 2분 경과 시에만 재업로드
+#         하고, 스로틀은 마커 mtime 으로 판정한다.
+#
+#         SessionEnd 는 세션이 곱게 끝날 때만 온다 — 터미널을 닫거나 프로세스가 죽으면
+#         안 온다. 그래서 백스톱을 SessionEnd 하나에 걸면 급사 시 스로틀 창 하나만큼이
+#         통째로 유실된다(2026-07-21 실측: 마지막 7분 누락). 창을 2분으로 좁혀 손실
+#         상한을 낮추고, Stop 을 더해 도구를 안 쓰고 대화만 이어간 구간도 회수한다
+#         (PostToolUse matcher 는 Bash·Edit·Write 등에만 걸려 대화만 하면 안 뜬다).
+#         창을 좁힐 수 있는 건 이제 전송이 증분(delta)이라 한 번에 보내는 양이 작아서다.
 #   전제  ①install_token 마커 존재 ②transcript_path 가 허용 경로의 실제 파일
 #         ③동의 마커 ~/.rona/transcript-consent 존재. ①② 불충족은 조용히 종료.
 #   서버  handshake(게이트 3종 preflight) 통과 시에만 upload. 서버가 본 방어선 — 이 훅은
@@ -116,19 +124,19 @@ case "$TRANSCRIPT_PATH" in
 esac
 [ -f "$TRANSCRIPT_PATH" ] || exit 0
 
-# 세션 종료 이벤트는 최종 1회라 스로틀을 건너뛴다. 그 외(PostToolUse)는 마지막 시도
-# 후 10분 안이면 skip — find -mmin 은 mac/linux 공통.
+# 세션 종료 이벤트는 최종 1회라 스로틀을 건너뛴다. 그 외(Stop·PostToolUse)는 마지막
+# 시도 후 2분 안이면 skip — find -mmin 은 mac/linux 공통.
 #   수동 전송("지금 보내줘")은 이 마커를 지우는 것으로 창을 연다 — rm 실행 자체가
 #   PostToolUse 를 깨우므로 별도 트리거가 필요 없다.
 if [ "$EVENT_NAME" != "SessionEnd" ]; then
-  if find "$UPLOAD_MARKER" -mmin -10 2>/dev/null | grep -q .; then
+  if find "$UPLOAD_MARKER" -mmin -2 2>/dev/null | grep -q .; then
     exit 0
   fi
 fi
 
 # W6: 마커 디렉토리 권한 최소화 후, 스로틀 창을 지금 선점(마커 mtime=now). 백그라운드
 # 작업 전에 선점해야 rapid PostToolUse 가 동시에 중복 업로드를 띄우지 않는다. 실패하면
-# 이 창(10분)은 놓치지만 다음 창·SessionEnd(강제)가 백스톱 — 멱등이라 재업로드 안전.
+# 이 창(2분)은 놓치지만 다음 창·SessionEnd(강제)가 백스톱 — 멱등이라 재업로드 안전.
 # 동의 게이트보다 앞에 두는 이유: 미동의 세션이 매 도구 호출마다 결과 파일을 쓰지 않게.
 mkdir -p "$SESS_DIR" 2>/dev/null
 chmod 700 "$HOME/.rona" "$SESS_DIR" 2>/dev/null
