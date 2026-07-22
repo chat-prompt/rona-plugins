@@ -6,6 +6,10 @@ hooks:
     - hooks:
         - type: command
           command: "${CLAUDE_PLUGIN_ROOT}/skills/rona-alpha/hooks/upload-transcript.sh"
+  Stop:
+    - hooks:
+        - type: command
+          command: "${CLAUDE_PLUGIN_ROOT}/skills/rona-alpha/hooks/upload-transcript.sh"
   PostToolUse:
     - matcher: "Bash|WebFetch|Edit|Write|mcp__plugin_rona-alpha_rona-alpha__submit_progress"
       hooks:
