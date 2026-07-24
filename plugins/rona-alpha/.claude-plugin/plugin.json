@@ -1,7 +1,7 @@
 {
   "name": "rona-alpha",
   "description": "Rona 주제 추천 런처 (알파). 어드민이 골라둔 주제 스킬 목록에서 골라 내 계정으로 받아 그 자리에서 수행합니다. rona MCP의 list_topics/claim_topic/get_practice 사용.",
-  "version": "0.2.24",
+  "version": "0.2.25",
   "author": {
     "name": "Geniefy"
   },
