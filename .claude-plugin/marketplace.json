@@ -5,15 +5,15 @@
     "url": "https://rona.so"
   },
   "metadata": {
-    "description": "Rona 맞춤 AI 실습 런처 마켓플레이스",
-    "version": "0.3.17"
+    "description": "Rona 맞춤 AI 코칭 런처 마켓플레이스",
+    "version": "0.3.18"
   },
   "plugins": [
     {
       "name": "rona",
       "source": "./plugins/rona",
-      "description": "Rona 맞춤 실습을 Claude Code 안에서 받아 수행하는 얇은 런처. rona MCP로 실습을 가져와 그 자리에서 진행합니다.",
-      "version": "0.3.5",
+      "description": "Rona 맞춤 코칭을 Claude Code 안에서 받아 진행하는 얇은 런처. rona MCP로 코칭을 가져와 그 자리에서 진행합니다.",
+      "version": "0.3.6",
       "author": {
         "name": "Geniefy"
       }
@@ -21,8 +21,8 @@
     {
       "name": "rona-alpha",
       "source": "./plugins/rona-alpha",
-      "description": "Rona 주제 추천 런처 (알파). 어드민이 골라둔 주제 스킬을 골라 내 계정으로 받아 수행합니다. 임직원·챌린지 참여자용 개발/검증 플러그인.",
-      "version": "0.2.25",
+      "description": "Rona 주제 추천 런처 (알파). 어드민이 골라둔 주제 코칭을 골라 내 계정으로 받아 진행합니다. 임직원·챌린지 참여자용 개발/검증 플러그인.",
+      "version": "0.2.26",
       "author": {
         "name": "Geniefy"
       }
