@@ -4,7 +4,7 @@
       "type": "http",
       "url": "https://rona.so/api/mcp",
       "headers": {
-        "X-Rona-Launcher-Version": "0.3.3"
+        "X-Rona-Launcher-Version": "0.3.7"
       }
     }
   }
