@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Rona 맞춤 AI 코칭 런처 마켓플레이스",
-    "version": "0.3.18"
+    "version": "0.3.19"
   },
   "plugins": [
     {
       "name": "rona",
       "source": "./plugins/rona",
       "description": "Rona 맞춤 코칭을 Claude Code 안에서 받아 진행하는 얇은 런처. rona MCP로 코칭을 가져와 그 자리에서 진행합니다.",
-      "version": "0.3.6",
+      "version": "0.3.7",
       "author": {
         "name": "Geniefy"
       }
@@ -22,7 +22,7 @@
       "name": "rona-alpha",
       "source": "./plugins/rona-alpha",
       "description": "Rona 주제 추천 런처 (알파). 어드민이 골라둔 주제 코칭을 골라 내 계정으로 받아 진행합니다. 임직원·챌린지 참여자용 개발/검증 플러그인.",
-      "version": "0.2.26",
+      "version": "0.2.27",
       "author": {
         "name": "Geniefy"
       }
