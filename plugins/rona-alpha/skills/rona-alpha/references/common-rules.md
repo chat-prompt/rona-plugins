@@ -148,6 +148,8 @@ Step 0(폴더 점검) 직후·방향 합의 직전 **1회**만. 방금 폴더 �
 - **묻는 방식**: "기대한 결과 맞나요? 더 손볼 데 있으면 알려주세요."
 - 기대와 다르면 직전 단계로 돌아가 한 번 더 손보거나, 방향 자체가 아니면 방향 합의로 되감는다.
 
+기대한 결과가 맞다고 합의되면, 그 자리에서 **반드시** `skill_completed` 이벤트를 §추적 규칙대로 `log_event` 로 보낸다(payload `{"skill":"<받은 코칭 slug>","outcome":"<한 줄 요약>"}`) — 이 코칭에서 정확히 1회, 완주 인증이 걸린 이벤트다. 기대와 다르면 되감고, 합의가 된 뒤에만 보낸다.
+
 ---
 
 <!-- source: rona-practice src/lib/skill/skill-template.ts renderMasteryGate (soft 골격 + hard 분기; user_note comprehension 발사부는 alpha log_event MCP 로 적응) -->
