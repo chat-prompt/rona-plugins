@@ -313,6 +313,65 @@ assert_has  "Ld3. ★서버 업그레이드 후 같은 세션에서 재시도된
   "$(cat "$TESTHOME/curl.log" 2>/dev/null)" '"skip_reason":"file_missing"'
 assert_file "Ld4. 200 으로 받았으면 그때 가드를 세운다" "$(mpath sLd.skip-file_missing)"
 
+echo "=== M. 훅 등록 위치 (양쪽 교차 확인) ==="
+# 가장 위험한 실수: SKILL.md 에서 Stop 을 빼놓고 hooks.json 에 안 넣으면 훅이 통째로 사라진다.
+# 한쪽만 보면 그걸 못 잡으므로 두 파일을 같이 본다.
+HOOKS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SKILL_MD="$HOOKS_DIR/../SKILL.md"
+PLUGIN_HOOKS="$HOOKS_DIR/../../../hooks/hooks.json"
+FM="$(awk '/^---$/{n++; next} n==1' "$SKILL_MD" | grep -v '^[[:space:]]*#')"   # 주석 제외 frontmatter
+
+assert_eq "M1. hooks.json 에 Stop 이 등록돼 있다" \
+  "$(jq -r '.hooks | has("Stop")' "$PLUGIN_HOOKS")" "true"
+assert_has "M2. Stop 이 upload-transcript.sh 를 부른다" \
+  "$(jq -r '.hooks.Stop[0].hooks[0].command' "$PLUGIN_HOOKS")" "upload-transcript.sh"
+assert_eq "M3. Stop 은 async (0.2.25 실측대로 안전)" \
+  "$(jq -r '.hooks.Stop[0].hooks[0].async' "$PLUGIN_HOOKS")" "true"
+assert_eq "M4. ★SessionEnd 는 sync 유지 (async 필드 없음 — 종료 경합 미검증)" \
+  "$(jq -r '.hooks.SessionEnd[0].hooks[0].async // "none"' "$PLUGIN_HOOKS")" "none"
+assert_eq "M5. ★SKILL.md frontmatter 에는 Stop 이 없다(중복 발사 방지)" \
+  "$(printf '%s' "$FM" | grep -c '^  Stop:')" "0"
+assert_eq "M6. PostToolUse 는 스킬 스코프에 그대로 남는다" \
+  "$(printf '%s' "$FM" | grep -c '^  PostToolUse:')" "1"
+assert_eq "M7. ★open-and-track.sh 는 승격하지 않는다(matcher 가 넓어 전역이면 전 세션 스폰)" \
+  "$(grep -c 'open-and-track' "$PLUGIN_HOOKS")" "0"
+
+echo "=== N. 동의 직후 스로틀 면제 (2026-07-29 실측 시나리오 재현) ==="
+# 15:27:05 프로브가 스로틀 창 선점 → 15:27:51 동의 → 15:27:58 발사가 53초밖에 안 지나
+# 스로틀에 걸려 floor 미확정 → 다음 유효 발사(15:46)까지 18분 공백. 그걸 재현한다.
+sess_new "sN"; consent_off
+JSONL_N="$PROJ/n.jsonl"; grow "$JSONL_N" 1000
+OUT="$(fire "sN" "$JSONL_N" Stop)"                 # ← 15:27:05 프로브 (스로틀 마커 선점)
+assert_has  "N1. 미동의 발사가 프로브를 띄우고 스로틀 창을 선점" "$OUT" "PROBE POST"
+assert_file "N2. 스로틀 마커가 선점됐다" "$(mpath sN.transcript)"
+
+OUT="$(fire "sN" "$JSONL_N" Stop)"                 # 아직 미동의 → 스로틀 그대로 걸려야 한다
+assert_empty "N3. 미동의 구간은 스로틀 유지(거절한 코칭이 매 도구 호출마다 결과를 쓰지 않게)" "$OUT"
+
+consent_on                                          # ← 15:27:51 사용자 동의(런처가 마커 생성)
+OUT="$(fire "sN" "$JSONL_N" Stop)"                 # ← 15:27:58, 53초 경과 (스로틀 창 안)
+assert_eq   "N4. ★동의 직후 발사가 스로틀을 통과해 시작점을 바로 잡는다(18분 공백 제거)" \
+  "$(marker "sN.$TOK.floor")" "1000"
+
+grow "$JSONL_N" 1200
+OUT="$(fire "sN" "$JSONL_N" Stop)"
+assert_empty "N5. floor 가 잡히면 면제가 닫히고 스로틀이 다시 걸린다(면제는 최대 1회)" "$OUT"
+
+rm -f "$(mpath sN.transcript)"
+OUT="$(fire "sN" "$JSONL_N" Stop)"
+assert_has "N6. 스로틀 창이 열리면 동의 이후분만 전송" "$OUT" \
+  "DELTA floor=1000 offset=0 start=1000 bytes=1200 delta_raw=200"
+
+# SessionEnd 면제 회귀 — 위 N5 와 같은 조건(스로틀 창 안)에서도 SessionEnd 는 통과해야 한다.
+sess_new "sN2"; consent_on
+JSONL_N2="$PROJ/n2.jsonl"; grow "$JSONL_N2" 100
+fire "sN2" "$JSONL_N2" Stop >/dev/null             # floor 선점 + 스로틀 마커 선점
+grow "$JSONL_N2" 300
+OUT="$(fire "sN2" "$JSONL_N2" Stop)"
+assert_empty "N7. floor 확정 후 Stop 은 스로틀에 걸린다" "$OUT"
+OUT="$(fire "sN2" "$JSONL_N2" SessionEnd)"
+assert_has   "N8. ★SessionEnd 는 여전히 스로틀 면제(최종 백스톱)" "$OUT" "DELTA floor=100"
+
 echo
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
