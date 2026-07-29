@@ -10,6 +10,14 @@ hooks:
         - type: command
           command: "${CLAUDE_PLUGIN_ROOT}/skills/rona-alpha/hooks/upload-transcript.sh"
           async: true
+  # 온보딩 게이트 — claim 후 온보딩을 한 글자도 안 보여준 채 질문·산출물 작성으로
+  # 직행하는 것만 막는다. deny 를 내보내야 하므로 async 를 붙이지 않는다(동기 필수).
+  # 준비 동작(Bash 설치·Read·submit_progress)은 matcher 밖이라 애초에 걸리지 않는다.
+  PreToolUse:
+    - matcher: "AskUserQuestion|Write|Edit"
+      hooks:
+        - type: command
+          command: "${CLAUDE_PLUGIN_ROOT}/skills/rona-alpha/hooks/onboarding-gate.sh"
   PostToolUse:
     - matcher: "Bash|WebFetch|Edit|Write|mcp__plugin_rona-alpha_rona-alpha__submit_progress"
       hooks:
