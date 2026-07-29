@@ -39,8 +39,10 @@
 #         DB 를 건드리지 않는다(유령 행이 생기지 않는다).
 #
 #   범위  **동의 시점 이후만 보낸다.** 동의 게이트를 처음 통과한 순간의 파일 크기를
-#         <sid>.floor 에 박고(선점) 그 앞은 영원히 보내지 않는다 — 로나를 부르기 전
-#         하던 딴 작업 대화가 통째로 올라가던 것을 막는다.
+#         floor 에 박고(선점) 그 앞은 영원히 보내지 않는다 — 로나를 부르기 전 하던 딴
+#         작업 대화가 통째로 올라가던 것을 막는다. floor·offset 마커는 세션이 아니라
+#         **세션 × 코칭**(<sid>.<token>.*) 키다 — 한 세션에서 주제를 두 개 받으면
+#         <sid>.token 이 덮이므로, 세션 키로 잡으면 앞 코칭 구간이 뒤 코칭 행에 실린다.
 #
 #         산술: START = FLOOR + OFFSET / 전송 = tail -c +$((START+1)) / 쿼리 offset=OFFSET.
 #         OFFSET 은 파일 절대 위치가 아니라 **서버가 저장한 바이트**다. 그래서 첫 전송이
@@ -54,7 +56,9 @@
 #   결손  못 보낸 이유를 남긴다 — 무흔적 종료는 "안 돈 것"과 구분되지 않아 재발 시 로컬
 #         에서도 판정이 불가능하다(2026-07-29 진단이 여기서 막혔다). transcript_path 부재·
 #         허용 밖 경로·파일 없음 3종은 결과 마커 + handshake skip_reason 으로 서버에도
-#         기록한다. 사유별 <sid>.skip-<reason> 일회성 마커로 도구 호출마다의 폭주를 막는다.
+#         기록한다. 사유별 <sid>.skip-<reason> 일회성 마커로 도구 호출마다의 폭주를 막되,
+#         그 마커는 **서버가 200 으로 받은 뒤에만** 세운다(보내기 전에 세우면 서버가 아직
+#         그 사유를 모르는 배포 구간에서 세션이 영구 억제된다).
 #         토큰 마커 게이트만은 무흔적을 유지한다 — 그 자리 역할은 남의 세션 보호이고,
 #         토큰이 없으면 보고할 주소 자체가 없다(설계상 남길 수 없는 것이지 누락이 아니다).
 #
@@ -130,8 +134,7 @@ TOKEN_MARKER="$SESS_DIR/${SESSION_ID}.token"
 UPLOAD_MARKER="$SESS_DIR/${SESSION_ID}.transcript"          # mtime = 마지막 시도 시각(스로틀)
 RESULT_MARKER="$SESS_DIR/${SESSION_ID}.transcript-result"   # 런처가 읽어 사용자에게 전할 결과
 PROBE_MARKER="$SESS_DIR/${SESSION_ID}.probe"                # 이 세션에서 서버에 이미 물어봤다
-OFFSET_MARKER="$SESS_DIR/${SESSION_ID}.offset"             # 서버가 저장한 raw 바이트(누적 전송량)
-FLOOR_MARKER="$SESS_DIR/${SESSION_ID}.floor"               # 보내도 되는 첫 바이트(동의 시점 선점)
+LEGACY_OFFSET_MARKER="$SESS_DIR/${SESSION_ID}.offset"       # 0.2.x 의 세션 단위 offset(1회 이관용)
 
 # 결과 1줄 기록(런처가 읽는 유일한 표면). 값은 전부 우리가 만든 토큰·정수뿐.
 # DRYRUN 에서는 검증용으로 같은 줄을 stdout 에도 찍는다(파일은 그대로 남긴다).
@@ -160,6 +163,13 @@ is_uuid "$TOKEN" || exit 0                             # W4: 마커 토큰 재�
 BASE="https://rona.so/skill/api/transcript/${TOKEN}"
 CONSENT_MARKER="$CONSENT_DIR/${TOKEN}"
 
+# floor·offset 은 **세션 × 코칭** 키다. 세션 키만으로 잡으면 안 된다 — open-and-track.sh 의
+# save_token 이 새 install 마다 <sid>.token 을 무조건 덮어쓰므로, 한 세션에서 주제를 두 개
+# 받으면 앞 코칭(A)의 offset 을 뒤 코칭(B) 토큰으로 보내 409 → 리셋 → **A 구간 대화가 B 의
+# 행에 적재**된다(오귀속 + 중복). 토큰을 키에 넣으면 B 는 floor 가 없는 새 코칭으로 출발한다.
+OFFSET_MARKER="$SESS_DIR/${SESSION_ID}.${TOKEN}.offset"    # 서버가 저장한 raw 바이트(누적 전송량)
+FLOOR_MARKER="$SESS_DIR/${SESSION_ID}.${TOKEN}.floor"      # 보내도 되는 첫 바이트(동의 시점 선점)
+
 # 세션 종료 이벤트는 최종 1회라 스로틀을 건너뛴다. 그 외(Stop·PostToolUse)는 마지막
 # 시도 후 2분 안이면 skip — find -mmin 은 mac/linux 공통.
 #   수동 전송("지금 보내줘")은 이 마커를 지우는 것으로 창을 연다 — rm 실행 자체가
@@ -181,21 +191,32 @@ chmod 600 "$UPLOAD_MARKER" 2>/dev/null
 
 # 결손 보고: 결과 마커 + 서버 skip_reason(사유당 세션 1회). 서버가 미동의로 403 을 주면
 # 기록은 안 되지만 로컬 결과는 남는다 — 그쪽은 어드민의 동의 상태 컬럼으로 드러난다.
+#
+# 일회성 가드는 **서버가 실제로 받은 뒤에만** 세운다. 보내기 전에 세우면, 서버가 아직 이
+# 사유를 모르는 구간(신규 enum 미배포 → 400)에서 그 세션이 영구 억제돼 서버를 올린 뒤에도
+# 결손이 안 올라온다 — 무흔적 제거의 서버측 절반이 통째로 무효가 된다. 그래서 curl 을
+# 동기로 돌리고(-m 5, SessionEnd 지연 상한) 200 일 때만 가드를 남긴다. 실패하면 가드가 없어
+# 다음 스로틀 창에서 다시 시도된다.
 report_skip() {
   local reason="$1"
   local guard="$SESS_DIR/${SESSION_ID}.skip-${reason}"
   write_result "$reason"
   [ -f "$guard" ] && return 0
-  : > "$guard" 2>/dev/null
-  chmod 600 "$guard" 2>/dev/null
   if [ -n "$RONA_HOOK_DRYRUN" ]; then
     echo "SKIP POST ${BASE%/*}/<token>/handshake BODY={\"session_id\":\"${SESSION_ID}\",\"bytes\":0,\"gz_bytes\":0,\"skip_reason\":\"${reason}\"}"
+    : > "$guard" 2>/dev/null
+    chmod 600 "$guard" 2>/dev/null
     return 0
   fi
-  curl -fsS -m 10 -o /dev/null \
+  local skip_code
+  skip_code="$(curl -fsS -m 5 -o /dev/null -w '%{http_code}' \
     -X POST -H 'Content-Type: application/json' \
     -d "{\"session_id\":\"${SESSION_ID}\",\"bytes\":0,\"gz_bytes\":0,\"skip_reason\":\"${reason}\"}" \
-    "${BASE}/handshake" >/dev/null 2>&1 &
+    "${BASE}/handshake" 2>/dev/null)"
+  if [ "$skip_code" = "200" ]; then
+    : > "$guard" 2>/dev/null
+    chmod 600 "$guard" 2>/dev/null
+  fi
 }
 
 # ── 동의 게이트 (코칭 단위) ─────────────────────────────────────────────────
@@ -249,31 +270,59 @@ if [ ! -f "$TRANSCRIPT_PATH" ]; then
   exit 0
 fi
 
-# 현재 파일 전체 크기(raw).
+# 현재 파일 전체 크기(raw). 못 재면 판정 불가 — 조용히 죽지 않고 사유를 남긴다.
 BYTES="$(wc -c < "$TRANSCRIPT_PATH" 2>/dev/null | tr -cd '0-9')"
-[ -n "$BYTES" ] || exit 0
+if [ -z "$BYTES" ]; then
+  write_result "failed" "step=bytes"
+  exit 0
+fi
+
+# floor 마커 쓰기(+검증). 이 파일만 못 쓰면 매 발사가 FLOOR=BYTES 를 다시 계산하고
+# START==BYTES 라 **결과 마커도 없이 exit 0** — 이 PR 이 없애려는 무흔적 0 수집 그 자체다.
+# 그래서 쓴 뒤 되읽어 확인하고, 어긋나면 사유를 남기고 끝낸다.
+# 리다이렉션은 왼쪽부터 처리된다 — 2>/dev/null 을 *앞*에 둬야 쓰기 실패 메시지가 새지
+# 않는다(뒤에 두면 > 가 먼저 터져 stderr 로 그대로 나간다). 훅은 무출력이 원칙이다.
+write_floor() {
+  printf '%s' "$1" 2>/dev/null > "$FLOOR_MARKER"
+  chmod 600 "$FLOOR_MARKER" 2>/dev/null
+  [ "$(cat "$FLOOR_MARKER" 2>/dev/null | tr -cd '0-9')" = "$1" ]
+}
 
 # ── floor: 보내도 되는 첫 바이트 ────────────────────────────────────────────
 # 동의 게이트를 통과한 *직후* 한 번만 잡는다(거절 후 재부여도 그 시점이 floor 가 된다).
-#   .floor 없음 + .offset 있음 → 0. 구버전에서 이어받은 세션이라 서버 저장분과 갭이
-#                                 생기면 안 된다(offset 이 파일 절대 위치였다).
-#   .floor 없음 + .offset 없음 → 지금 파일 끝. 동의 이전 대화를 잘라낸다.
+#   .floor 없음 + 이 코칭의 .offset 있음 → 0 (이미 이 코칭으로 보내던 중)
+#   .floor 없음 + 0.2.x 세션 offset 있음 → 0 + 이 코칭 키로 1회 이관. 서버에 이미 담긴
+#       분량과 갭·중복이 생기면 안 된다(그때 offset 은 파일 절대 위치였다). 이관 후 옛
+#       마커를 지워, 같은 세션에서 다음 주제를 받으면 그 코칭은 새 floor 로 출발한다.
+#   .floor 없음 + 아무것도 없음 → 지금 파일 끝. 동의 이전 대화를 잘라낸다.
 FLOOR="$(cat "$FLOOR_MARKER" 2>/dev/null | tr -cd '0-9')"
 if [ -z "$FLOOR" ]; then
   if [ -f "$OFFSET_MARKER" ]; then
     FLOOR=0
+  elif [ -f "$LEGACY_OFFSET_MARKER" ]; then
+    FLOOR=0
+    LEGACY_OFFSET="$(cat "$LEGACY_OFFSET_MARKER" 2>/dev/null | tr -cd '0-9')"
+    [ -n "$LEGACY_OFFSET" ] || LEGACY_OFFSET=0
+    printf '%s' "$LEGACY_OFFSET" > "$OFFSET_MARKER" 2>/dev/null
+    chmod 600 "$OFFSET_MARKER" 2>/dev/null
+    rm -f "$LEGACY_OFFSET_MARKER" 2>/dev/null
   else
     FLOOR="$BYTES"
   fi
-  printf '%s' "$FLOOR" > "$FLOOR_MARKER" 2>/dev/null
-  chmod 600 "$FLOOR_MARKER" 2>/dev/null
+  if ! write_floor "$FLOOR"; then
+    write_result "failed" "step=floor"
+    exit 0
+  fi
 fi
 
-# 파일이 floor 보다 작아졌으면(축소·회전) 이 세션의 기준을 처음부터 다시 잡는다.
+# 파일이 floor 보다 작아졌으면(축소·회전) 지금 끝을 새 기준으로 잡는다. 0 으로 되돌리면
+# 확인된 적 없는 앞부분이 다시 사정권에 들어와 "동의 이후만" 이 깨진다.
 if [ "$FLOOR" -gt "$BYTES" ] 2>/dev/null; then
-  FLOOR=0
-  printf '0' > "$FLOOR_MARKER" 2>/dev/null
-  chmod 600 "$FLOOR_MARKER" 2>/dev/null
+  FLOOR="$BYTES"
+  if ! write_floor "$FLOOR"; then
+    write_result "failed" "step=floor"
+    exit 0
+  fi
   printf '0' > "$OFFSET_MARKER" 2>/dev/null
   chmod 600 "$OFFSET_MARKER" 2>/dev/null
 fi
@@ -368,8 +417,12 @@ fi
       write_result "failed" "step=upload"
     fi
   elif [ "$code" = "403" ]; then
-    # 서버 게이트 거부(미동의·비임직원·토큰 무효 — 사유는 서버가 안 알려준다).
-    write_result "denied"
+    # 서버 게이트 거부. 마커가 있는데 거부됐다 = 로컬 캐시가 서버보다 낡았다(가장 흔한
+    # 원인이 "이 코칭은 안 보내기로 함"). 낡은 마커를 지워 다음 발사가 프로브로 다시
+    # 판정하게 하고, 결과는 no_consent 로 남긴다 — denied 로 남기면 런처가 "임직원 계정이
+    # 필요하다"고 옮겨 말해 **거절한 사용자에게 사실과 다른 안내**가 나간다.
+    rm -f "$CONSENT_MARKER" 2>/dev/null
+    write_result "no_consent"
   else
     write_result "failed" "step=handshake"
   fi

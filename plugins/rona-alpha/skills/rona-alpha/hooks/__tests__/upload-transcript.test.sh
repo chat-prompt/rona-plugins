@@ -3,9 +3,12 @@
 #
 # 실행: bash plugins/rona-alpha/skills/rona-alpha/hooks/__tests__/upload-transcript.test.sh
 #
-# RONA_HOOK_DRYRUN=1 로 네트워크를 타지 않고 훅의 판정·산술만 관찰한다. HOME 을 임시
-# 디렉토리로 갈아끼워 실제 ~/.rona 와 ~/.claude 를 건드리지 않는다(훅이 두 경로를 전부
-# $HOME 기준으로 계산하므로 이 치환 하나로 격리가 끝난다).
+# 두 가지 방식으로 돌린다.
+#   ① RONA_HOOK_DRYRUN=1 — 네트워크 없이 훅의 판정·산술만 관찰(§A~K).
+#   ② curl 스텁 — PATH 앞에 가짜 curl 을 심어 http_code 를 우리가 정한다. 응답 코드에
+#      따라 갈리는 실제 분기(프로브 200/403, 결손 보고 200/400, 게이트 403)를 관찰(§L).
+# HOME 을 임시 디렉토리로 갈아끼워 실제 ~/.rona 와 ~/.claude 를 건드리지 않는다(훅이 두
+# 경로를 전부 $HOME 기준으로 계산하므로 이 치환 하나로 격리가 끝난다).
 #
 # 반드시 지켜야 하는 두 단언(이게 깨지면 "동의 이후만 수집"이 정반대로 뒤집힌다):
 #   ① 첫 전송은 offset=0 으로 나간다   (서버 append 조건은 행이 있을 때만 성립)
@@ -17,21 +20,22 @@ HOOK="$(cd "$(dirname "$0")/.." && pwd)/upload-transcript.sh"
 TESTHOME="$(mktemp -d 2>/dev/null)"
 trap 'rm -rf "$TESTHOME"' EXIT
 
-TOKEN="11111111-2222-3333-4444-555555555555"
+TOK="11111111-2222-3333-4444-555555555555"
+TOK_B="99999999-8888-7777-6666-555555555555"
 PROJ="$TESTHOME/.claude/projects/p"
 
 PASS=0
 FAIL=0
 
-ok()   { PASS=$((PASS + 1)); printf 'PASS  %s\n' "$1"; }
-bad()  { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n     ---- 실제 출력 ----\n%s\n     -------------------\n' "$1" "$2"; }
+ok()  { PASS=$((PASS + 1)); printf 'PASS  %s\n' "$1"; }
+bad() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n     ---- 실제 ----\n%s\n     --------------\n' "$1" "$2"; }
 
-has()    { printf '%s' "$1" | grep -qF -- "$2"; }
+has()            { printf '%s' "$1" | grep -qF -- "$2"; }
 assert_has()     { if has "$2" "$3"; then ok "$1"; else bad "$1 (기대: $3)" "$2"; fi; }
 assert_lacks()   { if has "$2" "$3"; then bad "$1 (없어야 함: $3)" "$2"; else ok "$1"; fi; }
 assert_empty()   { if [ -z "$2" ]; then ok "$1"; else bad "$1 (출력이 없어야 함)" "$2"; fi; }
-assert_file()    { if [ -f "$2" ]; then ok "$1"; else bad "$1 (파일 없음: $2)" ""; fi; }
-assert_no_file() { if [ -f "$2" ]; then bad "$1 (파일이 있으면 안 됨: $2)" "$(cat "$2" 2>/dev/null)"; else ok "$1"; fi; }
+assert_file()    { if [ -e "$2" ]; then ok "$1"; else bad "$1 (없음: $2)" ""; fi; }
+assert_no_file() { if [ -e "$2" ]; then bad "$1 (있으면 안 됨: $2)" "$(cat "$2" 2>/dev/null)"; else ok "$1"; fi; }
 assert_eq()      { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (기대 '$3', 실제 '$2')" ""; fi; }
 
 # ── 헬퍼 ────────────────────────────────────────────────────────────────────
@@ -39,28 +43,28 @@ hook_json() {  # $1=session_id $2=transcript_path $3=event
   printf '{"session_id":"%s","transcript_path":"%s","hook_event_name":"%s","tool_name":"Bash"}' "$1" "$2" "$3"
 }
 
-# 훅 1회 발사. 기본 이벤트는 SessionEnd — 스로틀 면제라 케이스마다 2분을 기다리지 않는다.
+# 훅 1회 발사(dryrun). 기본 이벤트는 SessionEnd — 스로틀 면제라 케이스마다 2분을 안 기다린다.
 fire() {  # $1=session_id $2=transcript_path [$3=event]
   hook_json "$1" "$2" "${3:-SessionEnd}" \
     | HOME="$TESTHOME" RONA_HOOK_DRYRUN=1 bash "$HOOK" 2>/dev/null
 }
 
-sess_new() {  # $1=session_id — 토큰 마커를 붙인 새 세션 준비
+sess_new() {  # $1=session_id [$2=token] — 토큰 마커를 붙인 세션 준비
   mkdir -p "$TESTHOME/.rona/session"
-  printf '%s' "$TOKEN" > "$TESTHOME/.rona/session/$1.token"
+  printf '%s' "${2:-$TOK}" > "$TESTHOME/.rona/session/$1.token"
 }
 
-consent_on()  { mkdir -p "$TESTHOME/.rona/consent"; : > "$TESTHOME/.rona/consent/$TOKEN"; }
-consent_off() { rm -f "$TESTHOME/.rona/consent/$TOKEN"; }
+consent_on()  { mkdir -p "$TESTHOME/.rona/consent"; : > "$TESTHOME/.rona/consent/${1:-$TOK}"; }
+consent_off() { rm -f "$TESTHOME/.rona/consent/${1:-$TOK}"; }
 
-grow() {  # $1=파일 $2=바이트 수 — 파일을 정확히 그 크기로 만든다
+grow() {  # $1=파일 $2=바이트 수
   mkdir -p "$(dirname "$1")"
   : > "$1"
-  local i=0
-  while [ "$i" -lt "$2" ]; do printf 'x' >> "$1"; i=$((i + 1)); done
+  head -c "$2" /dev/zero 2>/dev/null | tr '\0' 'x' >> "$1"
 }
 
 marker() { cat "$TESTHOME/.rona/session/$1" 2>/dev/null; }
+mpath()  { printf '%s' "$TESTHOME/.rona/session/$1"; }
 
 mkdir -p "$PROJ" "$TESTHOME/.rona/session"
 
@@ -69,25 +73,25 @@ JSONL_A="$PROJ/a.jsonl"; grow "$JSONL_A" 100
 OUT="$(fire "sA" "$JSONL_A")"
 assert_empty "A1. 토큰 마커 없는 세션 → 출력 없음" "$OUT"
 assert_no_file "A2. 토큰 마커 없는 세션 → 결과 마커도 안 남김(설계상 보고할 주소 없음)" \
-  "$TESTHOME/.rona/session/sA.transcript-result"
+  "$(mpath sA.transcript-result)"
 
 echo "=== B. 동의 게이트 (코칭 단위) ==="
 sess_new "sB"; consent_off
 JSONL_B="$PROJ/b.jsonl"; grow "$JSONL_B" 100
 OUT="$(fire "sB" "$JSONL_B")"
-assert_has  "B1. 동의 마커 없음 + 프로브 이력 없음 → 서버에 프로브" "$OUT" "PROBE POST"
-assert_lacks "B2. 프로브 단계에서 전송으로 넘어가지 않음"           "$OUT" "UPLOAD PUT"
+assert_has   "B1. 동의 마커 없음 + 프로브 이력 없음 → 서버에 프로브" "$OUT" "PROBE POST"
+assert_lacks "B2. 프로브 단계에서 전송으로 넘어가지 않음"            "$OUT" "UPLOAD PUT"
 assert_no_file "B3. 동의 전에는 floor 를 잡지 않는다(거절 후 재부여 시점이 floor)" \
-  "$TESTHOME/.rona/session/sB.floor"
+  "$(mpath "sB.$TOK.floor")"
 
-: > "$TESTHOME/.rona/session/sB.probe"
+: > "$(mpath sB.probe)"
 OUT="$(fire "sB" "$JSONL_B")"
-assert_has  "B4. 프로브 이력 있음(403 받았던 세션) → no_consent 결과" "$OUT" "RESULT status=no_consent"
-assert_lacks "B5. 세션당 프로브 1회 — 재발사에 프로브 없음"          "$OUT" "PROBE POST"
+assert_has   "B4. 프로브 이력 있음(403 받았던 세션) → no_consent 결과" "$OUT" "RESULT status=no_consent"
+assert_lacks "B5. 세션당 프로브 1회 — 재발사에 프로브 없음"           "$OUT" "PROBE POST"
 
 sess_new "sB2"; consent_on
 JSONL_B2="$PROJ/b2.jsonl"; grow "$JSONL_B2" 100
-: > "$TESTHOME/.rona/session/sB2.probe"
+: > "$(mpath sB2.probe)"
 OUT="$(fire "sB2" "$JSONL_B2")"
 assert_lacks "B6. 동의 마커가 있으면 프로브 이력을 무시하고 통과" "$OUT" "no_consent"
 
@@ -95,8 +99,8 @@ echo "=== C. floor 선점 + 첫 전송 ==="
 sess_new "sC"; consent_on
 JSONL_C="$PROJ/c.jsonl"; grow "$JSONL_C" 100
 OUT="$(fire "sC" "$JSONL_C")"
-assert_eq   "C1. 첫 통과 시 floor = 그 순간 파일 크기(이전 대화 차단)" "$(marker sC.floor)" "100"
-assert_empty "C2. 동의 이후 새로 붙은 게 없으면 전송 안 함"           "$OUT"
+assert_eq    "C1. 첫 통과 시 floor = 그 순간 파일 크기(이전 대화 차단)" "$(marker "sC.$TOK.floor")" "100"
+assert_empty "C2. 동의 이후 새로 붙은 게 없으면 전송 안 함"            "$OUT"
 
 grow "$JSONL_C" 250
 OUT="$(fire "sC" "$JSONL_C")"
@@ -107,7 +111,7 @@ assert_has "C5. 리셋 전송엔 잘라낸 앞부분 길이(start)를 함께 알
 assert_has "C6. 잘라 보내는 시작 바이트가 floor+1"                     "$OUT" "gzip tail +101"
 
 # 업로드 성공 시 훅이 하는 일: .offset = BYTES - FLOOR
-printf '150' > "$TESTHOME/.rona/session/sC.offset"
+printf '150' > "$(mpath "sC.$TOK.offset")"
 grow "$JSONL_C" 400
 OUT="$(fire "sC" "$JSONL_C")"
 assert_has   "C7. 두 번째 전송은 서버 저장 bytes 를 offset 으로 이어붙인다" "$OUT" \
@@ -117,52 +121,59 @@ assert_lacks "C9. append 전송엔 start 를 붙이지 않음" "$OUT" "&start="
 
 echo "=== D. 409 자가복구 ==="
 # 409 핸들러가 하는 일 = .offset 을 0 으로 리셋. 그 다음 발사를 관찰한다.
-printf '0' > "$TESTHOME/.rona/session/sC.offset"
+printf '0' > "$(mpath "sC.$TOK.offset")"
 OUT="$(fire "sC" "$JSONL_C")"
 assert_has "D1. ★단언② 409 후 재전송 시작점 == FLOOR (파일 처음으로 안 내려감)" "$OUT" \
   "DELTA floor=100 offset=0 start=100 bytes=400 delta_raw=300"
 assert_has "D2. 409 복구 전송도 start=FLOOR 를 실어 보낸다" "$OUT" "&start=100"
 
-echo "=== E. floor 없이 이어받은 구버전 세션 ==="
+echo "=== E. floor 없이 이어받은 0.2.x 세션 (1회 이관) ==="
 sess_new "sE"; consent_on
 JSONL_E="$PROJ/e.jsonl"; grow "$JSONL_E" 300
-printf '50' > "$TESTHOME/.rona/session/sE.offset"   # 구버전 .offset = 파일 절대 위치
+printf '50' > "$(mpath sE.offset)"   # 0.2.x 의 세션 단위 offset(= 파일 절대 위치)
 OUT="$(fire "sE" "$JSONL_E")"
-assert_has "E1. .offset 만 있으면 floor=0 — 서버 저장분과 갭 없이 이어진다" "$OUT" \
+assert_has     "E1. 세션 단위 offset 만 있으면 floor=0 — 서버 저장분과 갭 없이 이어진다" "$OUT" \
   "DELTA floor=0 offset=50 start=50 bytes=300 delta_raw=250"
+assert_eq      "E2. 옛 offset 이 이 코칭 키로 이관된다" "$(marker "sE.$TOK.offset")" "50"
+assert_no_file "E3. 이관 후 옛 마커는 제거(다음 코칭이 물려받지 않게)" "$(mpath sE.offset)"
 
 echo "=== F. 파일 축소·회전 ==="
 sess_new "sF"; consent_on
 JSONL_F="$PROJ/f.jsonl"; grow "$JSONL_F" 250
-printf '1000' > "$TESTHOME/.rona/session/sF.floor"
-printf '40'   > "$TESTHOME/.rona/session/sF.offset"
+printf '1000' > "$(mpath "sF.$TOK.floor")"
+printf '40'   > "$(mpath "sF.$TOK.offset")"
 OUT="$(fire "sF" "$JSONL_F")"
-assert_has "F1. floor 가 파일보다 크면 기준을 처음부터 다시 잡는다" "$OUT" \
-  "DELTA floor=0 offset=0 start=0 bytes=250 delta_raw=250"
-assert_eq  "F2. floor 마커도 0 으로 갱신" "$(marker sF.floor)" "0"
+assert_eq    "F1. floor 가 파일보다 크면 지금 끝을 새 기준으로(0 으로 되돌리지 않는다)" \
+  "$(marker "sF.$TOK.floor")" "250"
+assert_empty "F2. 새 기준 == 파일 끝이라 이번엔 보낼 게 없다" "$OUT"
+assert_eq    "F3. offset 도 리셋" "$(marker "sF.$TOK.offset")" "0"
+grow "$JSONL_F" 400
+OUT="$(fire "sF" "$JSONL_F")"
+assert_has   "F4. 회전 후 새로 쌓인 분만 전송" "$OUT" \
+  "DELTA floor=250 offset=0 start=250 bytes=400 delta_raw=150"
 
 echo "=== G. 결손 3종 (무흔적 종료 제거) ==="
 sess_new "sG1"; consent_on
 OUT="$(fire "sG1" "" SessionEnd)"
-assert_has  "G1a. transcript_path 부재 → 결과 마커"   "$OUT" "RESULT status=no_transcript_path"
-assert_has  "G1b. transcript_path 부재 → 서버에 결손 보고" "$OUT" '"skip_reason":"no_transcript_path"'
+assert_has "G1a. transcript_path 부재 → 결과 마커"       "$OUT" "RESULT status=no_transcript_path"
+assert_has "G1b. transcript_path 부재 → 서버에 결손 보고" "$OUT" '"skip_reason":"no_transcript_path"'
 
 sess_new "sG2"; consent_on
 OUT="$(fire "sG2" "/tmp/evil.jsonl")"
-assert_has  "G2a. 허용 밖 경로 → 결과 마커"      "$OUT" "RESULT status=path_not_allowed"
-assert_has  "G2b. 허용 밖 경로 → 서버에 결손 보고" "$OUT" '"skip_reason":"path_not_allowed"'
+assert_has "G2a. 허용 밖 경로 → 결과 마커"       "$OUT" "RESULT status=path_not_allowed"
+assert_has "G2b. 허용 밖 경로 → 서버에 결손 보고" "$OUT" '"skip_reason":"path_not_allowed"'
 
 sess_new "sG3"; consent_on
 OUT="$(fire "sG3" "$TESTHOME/.claude/../etc/x.jsonl")"
-assert_has  "G3. 상위 탈출(..) 경로도 path_not_allowed" "$OUT" "RESULT status=path_not_allowed"
+assert_has "G3. 상위 탈출(..) 경로도 path_not_allowed" "$OUT" "RESULT status=path_not_allowed"
 
 sess_new "sG4"; consent_on
 OUT="$(fire "sG4" "$PROJ/nope.jsonl")"
-assert_has  "G4a. 파일 없음 → 결과 마커"      "$OUT" "RESULT status=file_missing"
-assert_has  "G4b. 파일 없음 → 서버에 결손 보고" "$OUT" '"skip_reason":"file_missing"'
+assert_has "G4a. 파일 없음 → 결과 마커"       "$OUT" "RESULT status=file_missing"
+assert_has "G4b. 파일 없음 → 서버에 결손 보고" "$OUT" '"skip_reason":"file_missing"'
 
 OUT="$(fire "sG4" "$PROJ/nope.jsonl")"
-assert_has   "G5a. 같은 사유 재발사도 결과 마커는 갱신" "$OUT" "RESULT status=file_missing"
+assert_has   "G5a. 같은 사유 재발사도 결과 마커는 갱신"      "$OUT" "RESULT status=file_missing"
 assert_lacks "G5b. 결손 보고는 세션당 사유당 1회(폭주 차단)" "$OUT" "SKIP POST"
 
 echo "=== H. 스로틀 / 킬스위치 ==="
@@ -170,13 +181,13 @@ sess_new "sH"; consent_on
 JSONL_H="$PROJ/h.jsonl"; grow "$JSONL_H" 100
 fire "sH" "$JSONL_H" >/dev/null            # floor 선점
 grow "$JSONL_H" 200
-rm -f "$TESTHOME/.rona/session/sH.transcript"   # 수동 전송 = 스로틀 마커를 지워 창을 여는 경로
+rm -f "$(mpath sH.transcript)"             # 수동 전송 = 스로틀 마커를 지워 창을 여는 경로
 OUT="$(fire "sH" "$JSONL_H" Stop)"
-assert_has  "H1. Stop 이벤트 정상 전송" "$OUT" "UPLOAD PUT"
+assert_has   "H1. Stop 이벤트 정상 전송" "$OUT" "UPLOAD PUT"
 OUT="$(fire "sH" "$JSONL_H" Stop)"
 assert_empty "H2. 2분 스로틀 — 직후 Stop 재발사는 조용히 skip" "$OUT"
 OUT="$(fire "sH" "$JSONL_H" SessionEnd)"
-assert_has  "H3. SessionEnd 는 스로틀 면제" "$OUT" "DELTA"
+assert_has   "H3. SessionEnd 는 스로틀 면제" "$OUT" "DELTA"
 
 OUT="$(hook_json "sH" "$JSONL_H" SessionEnd \
   | HOME="$TESTHOME" RONA_HOOK_DRYRUN=1 RONA_TRANSCRIPT_HOOK_DISABLED=1 bash "$HOOK" 2>/dev/null)"
@@ -187,7 +198,7 @@ sess_new "sI"; consent_on
 JSONL_I="$PROJ/i.jsonl"; grow "$JSONL_I" 100
 fire "sI" "$JSONL_I" >/dev/null
 grow "$JSONL_I" 200
-: > "$TESTHOME/.rona/session/sI.no-send"          # 옛 '이 세션만 빼기' 마커
+: > "$(mpath sI.no-send)"                         # 옛 '이 세션만 빼기' 마커
 OUT="$(fire "sI" "$JSONL_I")"
 assert_lacks "I1. .no-send 마커는 더 이상 아무 효과가 없다" "$OUT" "excluded"
 assert_has   "I2. .no-send 가 있어도 정상 전송"             "$OUT" "UPLOAD PUT"
@@ -197,6 +208,110 @@ sess_new "sI2"; consent_off
 JSONL_I2="$PROJ/i2.jsonl"; grow "$JSONL_I2" 100
 OUT="$(fire "sI2" "$JSONL_I2")"
 assert_has "I3. 계정 단위 동의 마커로는 통과하지 못한다(코칭 단위로 다시 묻는다)" "$OUT" "PROBE POST"
+
+echo "=== J. 한 세션에서 주제 두 개 (토큰 교체) ==="
+# open-and-track.sh 의 save_token 은 새 install 마다 <sid>.token 을 덮어쓴다. floor/offset 이
+# 세션 키면 앞 코칭(A) 구간이 뒤 코칭(B) 행에 실린다 — 토큰 키잉이 그걸 막는지 본다.
+sess_new "sJ" "$TOK"; consent_on "$TOK"; consent_on "$TOK_B"
+JSONL_J="$PROJ/j.jsonl"; grow "$JSONL_J" 100
+fire "sJ" "$JSONL_J" >/dev/null                    # A: floor=100 선점
+grow "$JSONL_J" 300
+OUT="$(fire "sJ" "$JSONL_J")"
+assert_has "J1. 코칭 A 는 floor=100 에서 전송" "$OUT" \
+  "DELTA floor=100 offset=0 start=100 bytes=300 delta_raw=200"
+printf '200' > "$(mpath "sJ.$TOK.offset")"         # A 가 서버에 200바이트 담은 상태
+
+printf '%s' "$TOK_B" > "$(mpath sJ.token)"         # ← 같은 세션에서 주제 B 발급
+grow "$JSONL_J" 500
+OUT="$(fire "sJ" "$JSONL_J")"
+assert_eq    "J2. ★코칭 B 는 자기 floor 를 새로 잡는다(발급 시점 = 500)" \
+  "$(marker "sJ.$TOK_B.floor")" "500"
+assert_empty "J3. ★B 첫 발사에 A 구간(100..500)이 실리지 않는다" "$OUT"
+assert_eq    "J4. ★A 의 offset 이 B 로 새지 않는다" "$(marker "sJ.$TOK_B.offset")" ""
+assert_eq    "J5. A 의 마커는 그대로 보존"          "$(marker "sJ.$TOK.offset")" "200"
+grow "$JSONL_J" 620
+OUT="$(fire "sJ" "$JSONL_J")"
+assert_has   "J6. B 는 자기 발급 시점 이후만 보낸다" "$OUT" \
+  "DELTA floor=500 offset=0 start=500 bytes=620 delta_raw=120"
+
+echo "=== K. floor 쓰기 실패 (무흔적 0 수집 차단) ==="
+sess_new "sK"; consent_on
+JSONL_K="$PROJ/k.jsonl"; grow "$JSONL_K" 100
+mkdir -p "$(mpath "sK.$TOK.floor")"                # 파일 자리를 디렉토리로 막아 쓰기 실패 유도
+OUT="$(fire "sK" "$JSONL_K")"
+assert_has "K1. floor 를 못 쓰면 조용히 죽지 않고 사유를 남긴다" "$OUT" "RESULT status=failed step=floor"
+ERROUT="$(hook_json "sK" "$JSONL_K" SessionEnd \
+  | HOME="$TESTHOME" RONA_HOOK_DRYRUN=1 bash "$HOOK" 2>&1 >/dev/null)"
+assert_empty "K2. 쓰기 실패 메시지가 stderr 로 새지 않는다(훅은 무출력 원칙)" "$ERROUT"
+
+echo "=== L. 응답 코드별 실제 분기 (curl 스텁) ==="
+STUB="$TESTHOME/stub"
+mkdir -p "$STUB"
+cat > "$STUB/curl" <<'STUBEOF'
+#!/usr/bin/env bash
+# 테스트용 curl 스텁 — 호출을 로그에 적고 $CURL_STUB_CODE 를 http_code 로 돌려준다.
+code="${CURL_STUB_CODE:-200}"
+body=""; url=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -d) body="$2"; shift 2 ;;
+    http*) url="$1"; shift ;;
+    *) shift ;;
+  esac
+done
+printf 'CURL code=%s url=%s body=%s\n' "$code" "$url" "$body" >> "${CURL_STUB_LOG:-/dev/null}"
+printf '%s' "$code"
+STUBEOF
+chmod +x "$STUB/curl"
+
+# 실발사(dryrun 아님). 업로드 경로는 백그라운드라 그냥 부르면 검사와 경합한다 — 명령치환
+# 으로 감싸면 백그라운드가 물고 있는 stdout 이 닫힐 때까지(= 끝날 때까지) 기다린다.
+fire_real() {  # $1=session_id $2=transcript_path $3=http_code
+  local _ignored
+  _ignored="$(hook_json "$1" "$2" "SessionEnd" \
+    | HOME="$TESTHOME" PATH="$STUB:$PATH" CURL_STUB_CODE="$3" CURL_STUB_LOG="$TESTHOME/curl.log" \
+      bash "$HOOK" 2>/dev/null)"
+}
+result_of() { cat "$(mpath "$1.transcript-result")" 2>/dev/null; }
+
+# L-a. 프로브 403 → no_consent + .probe (마커 자가생성 안 함)
+sess_new "sLa"; consent_off
+JSONL_LA="$PROJ/la.jsonl"; grow "$JSONL_LA" 100
+fire_real "sLa" "$JSONL_LA" 403
+assert_has     "La1. 프로브 403 → no_consent 결과" "$(result_of sLa)" "status=no_consent"
+assert_file    "La2. 프로브 403 → .probe 로 세션 내 재질문 차단" "$(mpath sLa.probe)"
+assert_no_file "La3. 프로브 403 → 동의 마커를 만들지 않는다" "$TESTHOME/.rona/consent/$TOK"
+
+# L-b. 프로브 200 → 마커 self-heal 후 통과
+sess_new "sLb"; consent_off
+JSONL_LB="$PROJ/lb.jsonl"; grow "$JSONL_LB" 100
+fire_real "sLb" "$JSONL_LB" 200
+assert_file    "Lb1. 프로브 200 → 동의 마커 자가복구" "$TESTHOME/.rona/consent/$TOK"
+assert_no_file "Lb2. 프로브 200 → .probe 는 세우지 않는다" "$(mpath sLb.probe)"
+
+# L-c. 게이트 403(마커는 있는 상태) → 낡은 마커 제거 + no_consent (denied 아님)
+sess_new "sLc"; consent_on
+JSONL_LC="$PROJ/lc.jsonl"; grow "$JSONL_LC" 100
+fire_real "sLc" "$JSONL_LC" 403         # floor 선점만 하고 끝
+rm -f "$(mpath sLc.transcript)"
+grow "$JSONL_LC" 300
+fire_real "sLc" "$JSONL_LC" 403
+assert_has     "Lc1. ★게이트 403 → denied 가 아니라 no_consent" "$(result_of sLc)" "status=no_consent"
+assert_lacks   "Lc2. ★거절한 사용자에게 '권한 없음'으로 옮겨질 denied 를 안 쓴다" "$(result_of sLc)" "denied"
+assert_no_file "Lc3. 낡은 동의 마커 제거 → 다음 발사가 프로브로 재판정" "$TESTHOME/.rona/consent/$TOK"
+
+# L-d. 결손 보고 400(서버가 아직 신규 사유를 모름) → 가드 안 세움 → 다음 창에 재시도
+sess_new "sLd"; consent_on
+fire_real "sLd" "$PROJ/nope.jsonl" 400
+assert_has     "Ld1. 결손 400 이어도 로컬 결과는 남는다" "$(result_of sLd)" "status=file_missing"
+assert_no_file "Ld2. ★서버가 안 받았으면 일회성 가드를 세우지 않는다(영구 억제 차단)" \
+  "$(mpath sLd.skip-file_missing)"
+rm -f "$(mpath sLd.transcript)"
+: > "$TESTHOME/curl.log"
+fire_real "sLd" "$PROJ/nope.jsonl" 200
+assert_has  "Ld3. ★서버 업그레이드 후 같은 세션에서 재시도된다" \
+  "$(cat "$TESTHOME/curl.log" 2>/dev/null)" '"skip_reason":"file_missing"'
+assert_file "Ld4. 200 으로 받았으면 그때 가드를 세운다" "$(mpath sLd.skip-file_missing)"
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"
