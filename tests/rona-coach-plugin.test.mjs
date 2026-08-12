@@ -38,11 +38,14 @@ test('standalone plugin has a distinct manifest and OAuth remote MCP', async () 
 
 test('skill implements native execution and excludes legacy generation tools', async () => {
   const skill = await text(join(plugin, 'skills', 'rona-coach', 'SKILL.md'));
+  const sync = await text(join(plugin, 'skills', 'rona-coach', 'scripts', 'sync.mjs'));
   for (const name of ['start_coaching', 'get_coaching_state', 'update_coaching_state', 'submit_coaching_artifact', 'submit_coaching_evidence', 'complete_coaching']) {
     assert.ok(skill.includes(name), `missing ${name}`);
   }
   for (const forbidden of ['request_skill', 'check_skill_status', 'get_practice', 'claim_topic']) assert.equal(skill.includes(forbidden), false);
   for (const anchor of ['실제 자료', '명시적으로 동의', 'userReviewed', 'revision_conflict', 'partial', 'blocked', 'Stop']) assert.ok(skill.includes(anchor));
+  assert.match(skill, /\.rona\/coach-outbox\.json/);
+  assert.match(sync, /syncPlanFile/);
 });
 
 test('hooks only restore context and persist pending local state, never author completion', async () => {
