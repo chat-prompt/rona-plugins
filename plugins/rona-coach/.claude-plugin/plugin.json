@@ -1,0 +1,10 @@
+{
+  "name": "rona-coach",
+  "description": "사용자의 실제 업무를 AI로 함께 완성하고, 결과물·검증·사용자 확인까지 이어가는 로나 실행 코칭.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Geniefy"
+  },
+  "homepage": "https://rona.so",
+  "license": "MIT"
+}
