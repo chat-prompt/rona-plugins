@@ -55,6 +55,18 @@ test('skill implements native execution and excludes legacy generation tools', a
   assert.match(sync, /syncPlanFile/);
 });
 
+test('published coaching starts with purpose and does not interview for available time', async () => {
+  const skill = await text(join(plugin, 'skills', 'rona-coach', 'SKILL.md'));
+  const start = skill.split('## 시작과 재개')[1]?.split('## 맥락 인터뷰')[0] || '';
+  const interview = skill.split('## 맥락 인터뷰')[1]?.split('## 방향과 실행 계획 합의')[0] || '';
+  const questions = interview.split('정보가 부족하면')[0] || '';
+  assert.match(start, /로나 코칭[\s\S]*실제 업무[\s\S]*결과물/);
+  assert.match(start, /혼자 다시 할 수 있는 방법/);
+  assert.match(start, /재개[\s\S]*소개[\s\S]*반복하지 않는다/);
+  assert.match(questions, /지금 가진 실제 자료/);
+  assert.doesNotMatch(questions, /사용할 수 있는 시간|가용\s*시간|몇\s*시간/);
+});
+
 test('hooks only restore context and persist pending local state, never author completion', async () => {
   const hooks = await text(join(plugin, 'hooks', 'hooks.json'));
   const link = await text(join(plugin, 'hooks', 'session-link.sh'));
