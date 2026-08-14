@@ -43,7 +43,14 @@ test('skill implements native execution and excludes legacy generation tools', a
     assert.ok(skill.includes(name), `missing ${name}`);
   }
   for (const forbidden of ['request_skill', 'check_skill_status', 'get_practice', 'claim_topic']) assert.equal(skill.includes(forbidden), false);
-  for (const anchor of ['실제 자료', '명시적으로 동의', 'userReviewed', 'revision_conflict', 'partial', 'blocked', 'Stop']) assert.ok(skill.includes(anchor));
+  for (const anchor of [
+    '실제 자료', '명시적으로 동의', 'userReviewed', 'revision_conflict',
+    'partial', 'blocked', 'Stop', '맥락 대비', '개념과 이유 설명',
+    '공동 실행', '결과 검증', '이해와 방향 확인', '다음 행동 연결',
+    '더 설명해줘', '바로 실행해줘', '다음에 다시 할 때',
+  ]) assert.ok(skill.includes(anchor), `missing coaching contract: ${anchor}`);
+  assert.match(skill, /`네`[^\n]*`계속`[^\n]*(이해|만족)[^\n]*(추정하지|간주하지)/);
+  assert.match(skill, /고정[^\n]*(주제|교안)[^\n]*(사용하지|재생하지|중심으로 두지)/);
   assert.match(skill, /\.rona\/coach-outbox\.json/);
   assert.match(sync, /syncPlanFile/);
 });
@@ -76,4 +83,6 @@ test('published descriptions and versions stay aligned', async () => {
   assert.match(skill, new RegExp(`^description: ${description}$`, 'm'));
   assert.equal(listing.version, manifest.version);
   assert.equal(mcp.mcpServers['rona-coach'].headers['X-Rona-Launcher-Version'], `coach-${manifest.version}`);
+  assert.equal(manifest.version, '0.1.2');
+  assert.equal(marketplace.metadata.version, '0.3.26');
 });
