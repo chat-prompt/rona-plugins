@@ -62,3 +62,18 @@ test('marketplace publishes rona-coach alongside existing entries', async () => 
   const marketplace = JSON.parse(await text(join(root, '.claude-plugin', 'marketplace.json')));
   assert.deepEqual(marketplace.plugins.map((item) => item.name), ['rona', 'rona-alpha', 'rona-coach']);
 });
+
+test('published descriptions and versions stay aligned', async () => {
+  const description = '실제 업무 결과물을 만들고 검증하는 Rona 맞춤 코칭';
+  const marketplace = JSON.parse(await text(join(root, '.claude-plugin', 'marketplace.json')));
+  const listing = marketplace.plugins.find((item) => item.name === 'rona-coach');
+  const manifest = JSON.parse(await text(join(plugin, '.claude-plugin', 'plugin.json')));
+  const mcp = JSON.parse(await text(join(plugin, '.mcp.json')));
+  const skill = await text(join(plugin, 'skills', 'rona-coach', 'SKILL.md'));
+
+  assert.equal(listing.description, description);
+  assert.equal(manifest.description, description);
+  assert.match(skill, new RegExp(`^description: ${description}$`, 'm'));
+  assert.equal(listing.version, manifest.version);
+  assert.equal(mcp.mcpServers['rona-coach'].headers['X-Rona-Launcher-Version'], `coach-${manifest.version}`);
+});
