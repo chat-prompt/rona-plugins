@@ -35,6 +35,18 @@ function validatePlan(value) {
     checkpointIds.add(step.id);
     if (step.state === 'active' && ++activeCheckpoints > 1) invalid();
     text(step.title, 200);
+    if (step.description !== undefined) text(step.description, 500);
+  }
+  if (value.glossary !== undefined) {
+    if (!Array.isArray(value.glossary) || value.glossary.length > 20) invalid();
+    const terms = new Set();
+    for (const entry of value.glossary) {
+      if (!entry) invalid();
+      text(entry.term, 100); text(entry.definition, 500); text(entry.analogy, 300); text(entry.introducedAt, 64);
+      if (terms.has(entry.term)) invalid();
+      terms.add(entry.term);
+      if (entry.introducedAt !== 'onboarding' && !checkpointIds.has(entry.introducedAt)) invalid();
+    }
   }
   return value;
 }
