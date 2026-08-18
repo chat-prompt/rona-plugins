@@ -6,6 +6,7 @@ import test from 'node:test';
 
 const root = new URL('..', import.meta.url).pathname;
 const plugin = join(root, 'plugins', 'rona-coach');
+const supportRoot = process.env.RONA_SUPPORT_ROOT || join(root, '..', 'rona-support-coaching-fixes');
 
 async function text(path) { return readFile(path, 'utf8'); }
 async function treeHash(directory) {
@@ -52,6 +53,12 @@ test('skill implements native execution and excludes legacy generation tools', a
     '체크포인트 설명 계약', '세션 용어 기준표', '말투와 문장 예시',
     '이번 체크포인트가 바꾸는 결과물 상태', 'AI 활용법은 다음 중 하나일 때', '보충 설명',
     'glossary', 'definition', 'analogy', 'introducedAt',
+    '가벼운 탐색', '업무 이해 1/4', '재료와 환경 2/4',
+    '결과물과 사용 장면 3/4', '완료와 설명 수준 4/4',
+    '합의 뒤 작업 온보딩', '이번에 할 일과 결과물 70%',
+    '행동(무엇을 할지)', '통과 조건(무엇을 확인하면 끝인지)',
+    '최종 결과물 전체 검증', '작업 과정 요약', 'AI 활용과 재사용 요약',
+    'coaching_id', 'plan-events.jsonl', '비정상 응답',
   ]) assert.ok(skill.includes(anchor), `missing coaching contract: ${anchor}`);
   assert.match(skill, /`네`[^\n]*`계속`[^\n]*(이해|만족)[^\n]*(추정하지|간주하지)/);
   assert.match(skill, /고정[^\n]*(주제|교안)[^\n]*(사용하지|재생하지|중심으로 두지)/);
@@ -99,6 +106,22 @@ test('published descriptions and versions stay aligned', async () => {
   assert.match(skill, new RegExp(`^description: ${description}$`, 'm'));
   assert.equal(listing.version, manifest.version);
   assert.equal(mcp.mcpServers['rona-coach'].headers['X-Rona-Launcher-Version'], `coach-${manifest.version}`);
-  assert.equal(manifest.version, '0.1.4');
-  assert.equal(marketplace.metadata.version, '0.3.28');
+  assert.equal(manifest.version, '0.1.5');
+  assert.equal(marketplace.metadata.version, '0.3.29');
+});
+
+test('published coaching sources stay byte-identical to the Support source', async () => {
+  const sourceFiles = [
+    ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '1a34caec4fdf385301d4c9e1234c1236bed7586fc7ba77aae5b546988524be6e'],
+    ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', '9a5c32b42f5b4a83bcabff3a4ac1bc2efd57ec096f05b769719be6697d75c174'],
+  ];
+
+  for (const [pluginRelative, supportRelative, expectedSha] of sourceFiles) {
+    const [published, support] = await Promise.all([
+      readFile(join(plugin, pluginRelative)),
+      readFile(join(supportRoot, supportRelative)),
+    ]);
+    assert.deepEqual(published, support, `${pluginRelative} differs from Support`);
+    assert.equal(createHash('sha256').update(published).digest('hex'), expectedSha);
+  }
 });
