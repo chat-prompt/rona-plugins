@@ -35,6 +35,7 @@ function validatePlan(value) {
     checkpointIds.add(step.id);
     if (step.state === 'active' && ++activeCheckpoints > 1) invalid();
     text(step.title, 200);
+    if (step.description !== undefined) text(step.description, 500);
   }
   return value;
 }
