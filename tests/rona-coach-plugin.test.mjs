@@ -1,14 +1,45 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { lstat, readFile, readdir } from 'node:fs/promises';
+import { isAbsolute, join, resolve } from 'node:path';
 import test from 'node:test';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = resolve(new URL('..', import.meta.url).pathname);
 const plugin = join(root, 'plugins', 'rona-coach');
-const supportRoot = process.env.RONA_SUPPORT_ROOT || join(root, '..', 'rona-support-coaching-fixes');
+const supportSources = [
+  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '1a34caec4fdf385301d4c9e1234c1236bed7586fc7ba77aae5b546988524be6e'],
+  ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', '9a5c32b42f5b4a83bcabff3a4ac1bc2efd57ec096f05b769719be6697d75c174'],
+];
 
 async function text(path) { return readFile(path, 'utf8'); }
+async function hasSupportSources(candidate) {
+  const checks = await Promise.all(supportSources.map(async ([, relative]) => {
+    try {
+      return (await lstat(join(candidate, relative))).isFile();
+    } catch {
+      return false;
+    }
+  }));
+  return checks.every(Boolean);
+}
+async function resolveSupportRoot() {
+  const explicit = process.env.RONA_SUPPORT_ROOT?.trim();
+  if (explicit && !isAbsolute(explicit)) {
+    throw new Error('RONA_SUPPORT_ROOT must be an absolute path');
+  }
+  const candidates = [
+    ...(explicit ? [resolve(explicit)] : []),
+    resolve(root, '..', 'rona-support'),
+    resolve(root, '..', 'rona-support-coaching-fixes'),
+  ];
+  for (const candidate of candidates) {
+    if (await hasSupportSources(candidate)) return candidate;
+    if (explicit && candidate === resolve(explicit)) {
+      throw new Error(`RONA_SUPPORT_ROOT does not contain the expected Support sources: ${candidate}`);
+    }
+  }
+  throw new Error('Support sources not found; set RONA_SUPPORT_ROOT to an absolute Support repository path');
+}
 async function treeHash(directory) {
   const files = [];
   async function walk(path, relative = '') {
@@ -111,12 +142,9 @@ test('published descriptions and versions stay aligned', async () => {
 });
 
 test('published coaching sources stay byte-identical to the Support source', async () => {
-  const sourceFiles = [
-    ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '1a34caec4fdf385301d4c9e1234c1236bed7586fc7ba77aae5b546988524be6e'],
-    ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', '9a5c32b42f5b4a83bcabff3a4ac1bc2efd57ec096f05b769719be6697d75c174'],
-  ];
+  const supportRoot = await resolveSupportRoot();
 
-  for (const [pluginRelative, supportRelative, expectedSha] of sourceFiles) {
+  for (const [pluginRelative, supportRelative, expectedSha] of supportSources) {
     const [published, support] = await Promise.all([
       readFile(join(plugin, pluginRelative)),
       readFile(join(supportRoot, supportRelative)),
