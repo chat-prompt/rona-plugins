@@ -163,6 +163,7 @@ AI 활용법은 다음 중 하나일 때 실행 직전에 설명한다: 처음 �
   "engine": "claude",
   "sessionRef": null,
   "status": "active",
+  "coachingPhase": "onboarding",
   "revision": 0,
   "coachingId": "서버가 반환한 UUID 또는 null",
   "serverRevision": 0,
@@ -185,11 +186,12 @@ AI 활용법은 다음 중 하나일 때 실행 직전에 설명한다: 처음 �
 - `challengeId`는 `.rona/challenge.json`에서 확실히 확인한 UUID만 사용하고, 아니면 `null`로 둔다.
 - `engine`은 현재 에이전트에 따라 `claude` 또는 `codex`다.
 - `status`는 `active`, `paused`, `completed` 중 하나다.
+- `coachingPhase`는 새 코칭에서 필수이며 `onboarding`, `checkpoint`, `review`, `completed` 중 하나다. 작업 온보딩 전에는 `onboarding`, 현재 체크포인트 실행 중에는 `checkpoint`, 결과 검증을 보여주고 사용자 판단을 기다릴 때는 `review`, 서버 완료를 확인한 뒤에는 `completed`로 저장한다.
 - 새 계획의 모든 체크포인트는 방향 합의 단계에서부터 `행동(무엇을 할지) → 이유(왜 지금 하는지) → 실제 자료(무엇을 사용할지) → 통과 조건(무엇을 확인하면 끝인지)`을 담은 `description`이 필수다. 상태는 `pending`, `active`, `done` 중 하나이며 동시에 `active`인 항목은 최대 하나다. 승인한 체크포인트의 ID·배열 순서·제목·`description`은 이 파일에 그대로 보존한다.
 - `glossary`는 선택 필드이며 최대 20개다. 각 항목은 `term`, `definition`, `analogy`, `introducedAt`을 가진다. `introducedAt`은 `onboarding` 또는 실제 체크포인트 ID다. 용어를 처음 설명한 뒤 항목을 추가하고 `revision`을 1 올려 저장·동기화한다.
 - `coachingId`와 `serverRevision`은 사용자에게 보여주지 않는 연결 정보다. 서버 도구를 쓸 수 없으면 각각 `null`, `0`으로 둔다.
 
-저장할 때마다 이 스킬 번들의 `scripts/sync.mjs`를 실행한다. 이 스크립트는 schema v1, checkpoint ID의 형식·중복 여부·상태·제목·최대 500자 `description`을 검증한 뒤 `{ eventId, plan }` 전체 envelope를 localhost plan bridge에 POST한다. bridge의 HTTP 성공과 JSON `ok: true`·승인된 `reason`을 모두 확인하지 못한 모든 경우(bridge 부재, HTTP 오류, 비정상 응답, 미승인 `reason`, timeout 포함)에는 같은 envelope를 Support 데이터 디렉터리의 `plan-events.jsonl`에 보관한다. 따라서 체크포인트 ID·순서·제목·`description`은 `start_coaching` payload가 아니라 승인 후 저장한 `.rona/plan.json`과 이 plan sync 경계에서 보존된다.
+저장할 때마다 이 스킬 번들의 `scripts/sync.mjs`를 실행한다. 이 스크립트는 schema v1, `coachingPhase`, checkpoint ID의 형식·중복 여부·상태·제목·최대 500자 `description`을 검증한 뒤 `{ eventId, plan }` 전체 envelope를 localhost plan bridge에 POST한다. bridge의 HTTP 성공과 JSON `ok: true`·승인된 `reason`을 모두 확인하지 못한 모든 경우에는 같은 envelope를 Support 데이터 디렉터리의 `plan-events.jsonl`에 보관한다. 단, `checkpoint-approval-required`나 `checkpoint-transition-invalid`는 재전송할 네트워크 실패가 아니라 plan bridge가 거부한 전이이므로 오프라인 대기열에 넣지 않는다. 이때 현재 체크포인트의 검토 상태와 사용자의 최신 답변을 다시 확인하고, 자동 재시도하거나 다음 체크포인트를 먼저 실행하지 않는다. 따라서 체크포인트 ID·순서·제목·`description`은 `start_coaching` payload가 아니라 승인 후 저장한 `.rona/plan.json`과 이 plan sync 경계에서 보존된다.
 
 ```sh
 node <스킬 폴더>/scripts/sync.mjs --file <작업 폴더>/.rona/plan.json
@@ -234,6 +236,8 @@ node <스킬 폴더>/scripts/sync.mjs --file <작업 폴더>/.rona/plan.json
 
 각 체크포인트는 학습 목차가 아니라 실제 결과물의 상태 변화다. 다음 여섯 개입을 순서대로 수행한다. 현재 체크포인트 안의 단순하거나 이미 익숙한 반복 작업은 짧게 묶을 수 있지만 서로 다른 체크포인트는 한 응답에 묶지 않으며 중요한 이유와 결과 검증도 생략하지 않는다.
 
+작업 온보딩을 마치면 `coachingPhase: checkpoint`로 revision을 올려 저장·동기화한 뒤 첫 체크포인트를 실행한다. 각 체크포인트의 실행과 검증 중에는 `checkpoint`를 유지한다. 결과 검증을 사용자에게 보여주기 직전에 `coachingPhase: review`로 revision을 올려 먼저 저장·동기화하고, 그 다음 승인·수정·중단 중 하나를 묻는다.
+
 ### 1. 맥락 대비
 
 사용자의 현재 방식과 막힌 지점을 짧게 짚고, 이번에 AI를 사용하면 무엇이 달라지며 어떤 판단은 사용자가 해야 하는지 설명한다. 현재 방식이나 실제 자료를 확인하지 않은 채 범용 방법을 바로 적용하지 않는다.
@@ -254,7 +258,7 @@ node <스킬 폴더>/scripts/sync.mjs --file <작업 폴더>/.rona/plan.json
 
 확인한 결과, 처음과 달라진 점, 선택한 방법의 이유와 남은 위험을 보여준다. 결과가 사용자의 업무 목적에 맞는지와 다음 단계로 가도 되는지 묻는다. 이해·승인 질문에는 예시 답변을 제시하지 않는다. `네` 또는 `계속`만으로 이해나 만족을 추정하지 않는다. 다만 모든 단계에서 설명을 되말하게 하지 않고, 결과 전체를 흔드는 판단이나 처음 접한 핵심 방법에서만 사용자가 자기 말로 설명하거나 승인·수정·중단을 선택하게 한다. 사용자가 멈춤·수정·방향 변경을 말하면 즉시 멈춰 현재 단계 재작업, 방향 재합의, 일시정지 중 하나를 선택하게 한다.
 
-사용자 승인 전에는 다음 체크포인트를 실행·완료·동기화하거나 그 결과를 제시하지 않으며, 먼저 실행한 뒤 소급 승인을 받지 않는다. 승인 시 현재 체크포인트를 `done`, 다음 항목을 `active`로 바꾸고 저장·동기화한다. 수정 시 변경 이유를 반영해 같은 체크포인트에서 다시 검토한다. 방향이나 판정 기준이 바뀌면 영향을 설명하고 결과물 정의, 남은 체크포인트와 검증 기준을 다시 명시적으로 합의한다.
+사용자 승인 전에는 다음 체크포인트를 실행·완료·동기화하거나 그 결과를 제시하지 않으며, 먼저 실행한 뒤 소급 승인을 받지 않는다. 사용자 답변 한 번으로 체크포인트 하나만 넘긴다. 승인 시 현재 체크포인트만 `done`, 바로 다음 항목만 `active`로 바꾸고 `coachingPhase: checkpoint`로 revision을 올려 저장·동기화한다. 같은 답변으로 그 다음 체크포인트까지 완료하지 않는다. 수정 시 변경 이유를 반영해 같은 체크포인트에서 수정·재검증하고, 체크포인트 상태를 바꾸지 않은 새 revision의 `coachingPhase: review`를 먼저 저장·동기화한 뒤 다시 판단을 묻는다. 수정 뒤 이전 답변을 승인으로 재사용하지 않는다. 방향이나 판정 기준이 바뀌면 영향을 설명하고 결과물 정의, 남은 체크포인트와 검증 기준을 다시 명시적으로 합의한다.
 
 ### 6. 다음 행동 연결
 
@@ -276,7 +280,7 @@ node <스킬 폴더>/scripts/sync.mjs --file <작업 폴더>/.rona/plan.json
 
 최종 결과물 전체 검증은 모든 체크포인트 결과, source-fact coverage check, required source fact와 계산식, 실제 사용 장면과 완료 기준을 한 번에 대조하는 단계다. 이 검증이 present and correct임을 확인하기 전에는 `complete_coaching`을 호출하지 않는다. 결과물 요약에는 완성한 결과물의 위치·사용법·시작 대비 변화·완료 근거·남은 한계를 담는다. 작업 과정 요약에는 실제로 진행한 순서·중요한 판단·검증·실패와 복구를 담는다. AI 활용과 재사용 요약에는 AI에 맡긴 일, 사용자가 판단한 일, 사용한 방법과 이유·한계, 다음 유사 업무에서 다시 시작하는 최소 순서와 핵심 용어를 담는다. 사용자의 최종 확인 뒤에만 `update_coaching_state`로 `userReviewed: true`와 최종 학습 요약을 기록한 뒤 `complete_coaching`을 호출한다.
 
-서버가 `completed`를 반환한 것을 확인한 뒤에만 로컬 `status: completed`로 저장한다. 결과물, 검증 증거, 사용자 검토 중 하나라도 부족하면 서버가 반환한 부족 항목을 설명하고 계속 실행하거나 `partial`/`blocked`로 남긴다. 네트워크 때문에 완료 요청이 대기열에 들어간 경우에도 완료됐다고 말하지 않는다.
+서버가 `completed`를 반환한 것을 확인한 뒤에만 로컬 `status: completed`, `coachingPhase: completed`로 저장한다. 결과물, 검증 증거, 사용자 검토 중 하나라도 부족하면 서버가 반환한 부족 항목을 설명하고 계속 실행하거나 `partial`/`blocked`로 남긴다. 네트워크 때문에 완료 요청이 대기열에 들어간 경우에도 완료됐다고 말하지 않는다.
 
 마지막에는 다음을 함께 정리한다.
 

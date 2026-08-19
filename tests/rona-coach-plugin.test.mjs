@@ -7,8 +7,8 @@ import test from 'node:test';
 const root = resolve(new URL('..', import.meta.url).pathname);
 const plugin = join(root, 'plugins', 'rona-coach');
 const supportSources = [
-  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '1a34caec4fdf385301d4c9e1234c1236bed7586fc7ba77aae5b546988524be6e'],
-  ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', '9a5c32b42f5b4a83bcabff3a4ac1bc2efd57ec096f05b769719be6697d75c174'],
+  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '7c7405e28767083905895bb52490cd67c8f4da7ccae9c7a263718123f9a16c3a'],
+  ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', '1c9d8e20f73d9bf5e482cc5029ed0bb195b55a097bec84aa4a4306aae46b5b26'],
 ];
 
 async function text(path) { return readFile(path, 'utf8'); }

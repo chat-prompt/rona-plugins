@@ -9,7 +9,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 const CHECKPOINT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const STATES = new Set(['active', 'paused', 'completed']);
 const STEP_STATES = new Set(['pending', 'active', 'done']);
+const COACHING_PHASES = new Set(['onboarding', 'checkpoint', 'review', 'completed']);
 const ACKNOWLEDGED = new Set(['created', 'updated', 'duplicate', 'unchanged', 'stale']);
+const REJECTED = new Set(['checkpoint-approval-required', 'checkpoint-transition-invalid']);
 
 function invalid() { throw new Error('invalid plan snapshot'); }
 function text(value, max) {
@@ -22,6 +24,7 @@ function validatePlan(value) {
     || !STATES.has(value.status)
     || (value.engine !== null && !['claude', 'codex'].includes(value.engine))
     || (value.sessionRef !== null && !/^[A-Za-z0-9._~-]{16,128}$/.test(value.sessionRef || ''))
+    || (value.coachingPhase !== undefined && !COACHING_PHASES.has(value.coachingPhase))
     || !Number.isInteger(value.revision) || value.revision < 0
     || !Array.isArray(value.checkpoints) || value.checkpoints.length > 100
     || !Number.isFinite(Date.parse(value.createdAt)) || !Number.isFinite(Date.parse(value.updatedAt))) invalid();
@@ -100,6 +103,9 @@ export async function syncPlanFile(planPath, options = {}) {
       if (response.ok) {
         const result = await response.json();
         if (result?.ok === true && ACKNOWLEDGED.has(result.reason)) return { synced: true, queued: false };
+        if (result?.ok === true && REJECTED.has(result.reason)) {
+          return { synced: false, queued: false, rejected: true, reason: result.reason };
+        }
       }
     } catch {}
   }
@@ -120,7 +126,12 @@ if (isMain) {
     process.exitCode = 2;
   } else {
     syncPlanFile(planPath)
-      .then((result) => console.log(result.synced ? 'Support와 동기화했어요.' : '로컬에 안전하게 보관했어요.'))
+      .then((result) => {
+        if (result.rejected) {
+          console.error('현재 체크포인트의 검토와 사용자 답변을 다시 확인해 주세요.');
+          process.exitCode = 1;
+        } else console.log(result.synced ? 'Support와 동기화했어요.' : '로컬에 안전하게 보관했어요.');
+      })
       .catch(() => { console.error('실행 계획 파일을 확인하지 못했어요.'); process.exitCode = 1; });
   }
 }
