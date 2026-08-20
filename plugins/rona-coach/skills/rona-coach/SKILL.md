@@ -29,7 +29,7 @@ description: 실제 업무 결과물을 만들고 검증하는 Rona 맞춤 코�
 4. 새 코칭은 작업 폴더를 가볍게 탐색한 뒤 첫 질문 전에 다음 의미를 2~3문장으로 설명한다. 로나 코칭은 사용자의 실제 업무를 AI와 함께 결과물로 완성하는 과정이다. 방향과 체크포인트를 함께 정하고 실제 자료로 실행·검증하면서, 다음에는 혼자 다시 할 수 있는 방법까지 남긴다. 현재 업무나 문제가 주어지지 않았을 때만 별도 확인 질문을 추가하고, 그때 이 소개 뒤에 지금 해결하고 싶은 업무 문제를 바로 묻는다. 기존 계획을 재개할 때는 이 소개를 반복하지 않는다.
 5. 작업 폴더는 필요한 범위에서만 얕게 살핀다. 대규모 탐색이나 관련 없는 파일 읽기는 하지 않는다. 폴더가 비었거나 다른 작업으로 보이거나 동등한 기존 결과물이 발견된 경우에만 한 번 확인하고, 정상 점검은 사용자에게 알리지 않는다.
 ## 새 코칭 순서
-가벼운 탐색이 끝난 뒤 `2~3문장 소개와 한 질문`을 제공한다. 새 코칭은 다음 순서를 절대 바꾸지 않는다: `작업 폴더 가벼운 탐색 → 초보자 업무 맥락 인터뷰 → 방향 1~3개와 추천 → 사용자의 명시적 선택 → 전체 지도와 체크포인트 승인 → 승인 즉시 .rona/plan.json 저장 → start_coaching → 반환값 정규화 또는 실패 fallback → plan sync → 작업 중심 온보딩 → 첫 체크포인트`. 맥락이 확인되기 전에는 방향을 제안하거나 추천하지 않는다. 사용자가 맥락에 답하기 전에는 방향을 제안하거나 추천하지 않는다. 방향과 체크포인트를 함께 확인하고 실제 자료로 검증해 다음 업무에 다시 쓸 수 있게 한다. 전체 지도와 체크포인트 승인을 받은 뒤, 그 뒤에만 실제 자료를 읽거나 작성·도구 호출·체크포인트 실행을 한다.
+가벼운 탐색이 끝난 뒤 `2~3문장 소개와 한 질문`을 제공한다. 새 코칭은 다음 순서를 절대 바꾸지 않는다: `작업 폴더 가벼운 탐색 → 초보자 업무 맥락 인터뷰 → 방향 1~3개와 추천 → 사용자의 명시적 선택 → 전체 지도와 체크포인트 승인 → 승인 즉시 .rona/plan.json 저장 → sync_coaching_plan (사용할 수 없을 때만 sync helper) → start_coaching → 반환값 정규화 또는 실패 fallback → coachingId를 덧붙인 .rona/plan.json 저장 → sync_coaching_plan → 작업 중심 온보딩 → 첫 체크포인트`. 맥락이 확인되기 전에는 방향을 제안하거나 추천하지 않는다. 사용자가 맥락에 답하기 전에는 방향을 제안하거나 추천하지 않는다. 방향과 체크포인트를 함께 확인하고 실제 자료로 검증해 다음 업무에 다시 쓸 수 있게 한다. 전체 지도와 체크포인트 승인을 받은 뒤, 그 뒤에만 실제 자료를 읽거나 작성·도구 호출·체크포인트 실행을 한다.
 
 가벼운 탐색에서는 폴더와 파일 이름, README·안내 문서의 목차, 결과물로 보이는 파일 종류와 작업 규칙만 읽는다. 기본 한도는 최대 깊이 2, 폴더·파일 항목 100개, 최대 10개 후보 텍스트 파일, 파일당 64 KiB다. `.env*`, `*.pem`, `*.key`, `credentials*`, `.ssh`와 파일명에 `token`, `cookie`, `session`, `auth`가 들어간 설정 파일은 비밀정보·인증정보·개인정보가 담길 수 있는 민감정보로 보고 열지 않는다. 모든 파일 본문을 무차별로 읽지 않는다. 후보를 열기 전에 심볼릭 링크(symlink)는 따라가지 않고 열지 않는다. 모든 후보 경로는 canonicalize/realpath로 경로를 해석해 선택한 작업 폴더 내부인지 확인한 뒤에만 연다. 경로 해석이 실패하거나 workspace 밖으로 이탈하면 건너뛰고 `미확인`으로 분류한다. 실패·이탈 대상의 실제 경로는 사용자 응답·로그·payload에 노출하거나 보여주지 않는다. 한도에 도달하면 탐색을 멈추고 더 깊이 읽기 전에 사용자에게 동의와 범위를 확인한다. 탐색 내용은 사실 등급을 붙여 기록하고 사용자가 확인하거나 정정하게 한다.
 
@@ -68,12 +68,14 @@ description: 실제 업무 결과물을 만들고 검증하는 Rona 맞춤 코�
 2. 추천이 있다면 근거와 함께 표시한다. 추천 문장은 `사용자의 ... 때문에 N번 방향을 추천합니다.`처럼 사용자의 조건과 방향의 적합성을 한 문장으로 연결한다. 사용자가 선택하거나 수정하고 명시적으로 동의할 때까지 실행을 시작하지 않는다.
 3. 합의된 방향을 3~7개의 검증 가능한 체크포인트로 나눈다. 체크포인트를 만들 때부터 각 `description`에 `행동(무엇을 할지) → 이유(왜 지금 하는지) → 실제 자료(무엇을 사용할지) → 통과 조건(무엇을 확인하면 끝인지)`을 담는다. 제목만 먼저 만들고 실행 중에 설명을 채우지 않는다.
 4. 결과물, 완료 기준, 체크포인트를 한 번에 요약하고 승인받는다. 승인 즉시, 어떤 서버 호출보다 먼저 승인한 체크포인트의 ID·배열 순서·제목·`description`을 포함한 `.rona/plan.json`을 저장한다.
-5. 저장한 계획을 기준으로 `start_coaching`에 재시도에도 동일하게 유지할 `requestKey`(예: `rona-coach-20260812-weekly-report`), 제목, 결과물, 실제 사용 장면, 완료 기준 목록, 제약을 보낸다. `start_coaching`의 payload가 체크포인트 ID·순서·제목·`description`까지 서버에 등록한다고 가정하지 않는다. native 반환은 `{ coaching_id, coaching }` 형태이므로 `coaching_id`를 내부 `coachingId`로, `coaching.revision`을 `serverRevision`으로 정규화해 같은 `.rona/plan.json`에 덧붙여 저장한다. 인증·네트워크 오류로 `start_coaching`이 실패하면 native 시작 큐에 넣지 않고 `coachingId: null`, `serverRevision: 0`인 로컬 fallback을 유지한다. 그 뒤 `scripts/sync.mjs`를 실행해 plan bridge의 성공 확인을 받으면 전송하고, bridge 성공 확인을 받지 못한 모든 경우(bridge 부재, HTTP 오류, 비정상 응답, 미승인 `reason`, timeout 포함)에는 같은 envelope를 로컬 `plan-events.jsonl`에 보관한 뒤 작업 온보딩으로 들어간다. 서버 payload에는 `확인됨` 사실과 사용자가 명시적으로 채택한 `추정`만 담는다. 채택되지 않은 추정과 미확인은 서버 payload에 보내지 않고 포함하지 않는다. 폴더 원문과 비밀정보는 어떤 payload에도 넣지 않는다. `requestKey`는 로컬 계획에 보관하고 같은 시작 요청에서는 바꾸지 않는다.
+5. 저장한 전체 계획을 `sync_coaching_plan`에 그대로 전달한다. 이 로컬 MCP 도구를 사용할 수 없을 때만 `scripts/sync.mjs`를 대체 경로로 한 번 실행한다. 그 뒤 계획을 기준으로 `start_coaching`에 재시도에도 동일하게 유지할 `requestKey`(예: `rona-coach-20260812-weekly-report`), 제목, 결과물, 실제 사용 장면, 완료 기준 목록, 제약을 보낸다. `start_coaching`의 payload가 체크포인트 ID·순서·제목·`description`까지 서버에 등록한다고 가정하지 않는다. native 반환은 `{ coaching_id, coaching }` 형태이므로 `coaching_id`를 내부 `coachingId`로, `coaching.revision`을 `serverRevision`으로 정규화해 같은 `.rona/plan.json`에 덧붙여 저장한 뒤 다시 `sync_coaching_plan`을 호출한다. 인증·네트워크 오류로 `start_coaching`이 실패하면 native 시작 큐에 넣지 않고 `coachingId: null`, `serverRevision: 0`인 로컬 fallback을 유지한다. 서버 payload에는 `확인됨` 사실과 사용자가 명시적으로 채택한 `추정`만 담는다. 채택되지 않은 추정과 미확인은 서버 payload에 보내지 않고 포함하지 않는다. 폴더 원문과 비밀정보는 어떤 payload에도 넣지 않는다. `requestKey`는 로컬 계획에 보관하고 같은 시작 요청에서는 바꾸지 않는다.
 6. 추천 방향이 합의되면 `update_coaching_state`로 `direction`, 첫 `nextAction`, `expectedRevision`을 기록한다. `revision_conflict`가 오면 반환된 최신 상태를 기준으로 사용자에게 변경점을 설명하고 다시 합의한다.
 
 ## 합의 뒤 작업 온보딩
 
-사용자가 결과물·방향·완료 기준·체크포인트를 승인하면 승인 즉시, 어떤 서버 호출보다 먼저 승인한 체크포인트의 ID·배열 순서·제목·`description`을 포함한 `.rona/plan.json`을 저장한다. 그다음 `start_coaching`을 시도한다. native 반환은 실제로 `{ coaching_id, coaching }` 형태이므로 성공하면 `coaching_id`를 내부 `coachingId`로, `coaching.revision`을 `serverRevision`으로 정규화해 기존 계획에 덧붙여 저장한다. 인증·네트워크 오류로 실패하면 시작 등록을 큐에 넣지 않고 ID 없이 로컬 fallback을 유지한다. 이 계획을 `scripts/sync.mjs`로 동기화해 plan bridge의 성공 확인을 받으면 전송하고, bridge 성공 확인을 받지 못한 모든 경우(bridge 부재, HTTP 오류, 비정상 응답, 미승인 `reason`, timeout 포함)에는 같은 envelope를 로컬 `plan-events.jsonl`에 보관한다. 동기화 결과를 구분한 뒤 작업 온보딩을 보여주고 첫 체크포인트로 들어간다.
+사용자가 결과물·방향·완료 기준·체크포인트를 승인하면 승인 즉시, 어떤 서버 호출보다 먼저 승인한 체크포인트의 ID·배열 순서·제목·`description`을 포함한 `.rona/plan.json`을 저장한다. 저장한 같은 전체 계획을 `sync_coaching_plan`으로 동기화하고, 도구를 사용할 수 없을 때만 `scripts/sync.mjs`를 대체 경로로 한 번 실행한다. 그다음 `start_coaching`을 시도한다. native 반환은 실제로 `{ coaching_id, coaching }` 형태이므로 성공하면 `coaching_id`를 내부 `coachingId`로, `coaching.revision`을 `serverRevision`으로 정규화해 기존 계획에 덧붙여 저장한 뒤 다시 `sync_coaching_plan`을 호출한다. 인증·네트워크 오류로 실패하면 시작 등록을 큐에 넣지 않고 ID 없이 로컬 fallback을 유지한다. 동기화 결과를 구분한 뒤 작업 온보딩을 보여주고 첫 체크포인트로 들어간다.
+
+fallback `scripts/sync.mjs`는 plan bridge에 계획을 보내며, plan bridge의 성공 확인을 기준으로 한다. bridge 성공 확인을 받지 못한 모든 경우(HTTP 오류, 비정상 응답, 미승인 `reason`, timeout 포함)에는 같은 envelope를 로컬 `plan-events.jsonl`에 보관하고 작업 온보딩으로 들어간다.
 
 온보딩 비중은 `이번에 할 일과 결과물 70% / 진행 방식과 역할 20% / Rona 코칭 설명 10%`를 기준으로 한다. 일반적인 Rona 코칭 설명은 2~3문장을 넘기지 않고, 사용자가 지금 무엇을 만들며 왜 이 순서로 진행하는지 이해하는 데 필요한 내용부터 보여준다.
 
@@ -89,7 +91,7 @@ description: 실제 업무 결과물을 만들고 검증하는 Rona 맞춤 코�
 
 각 checkpoint description은 추상적인 제목만 쓰지 않는다. `행동(무엇을 할지) → 이유(왜 지금 하는지) → 실제 자료(무엇을 사용할지) → 통과 조건(무엇을 확인하면 끝인지)`를 한 문장 또는 짧은 두 문장으로 담아 사용자 업무 언어로 작성한다. 각 단계에 들어갈 때도 이 description을 그대로 읽는 데 그치지 않고, 현재 결과물과 사용자의 역할에 맞춰 설명한다.
 
-승인한 체크포인트의 ID·순서·제목·`description`은 `.rona/plan.json`에 먼저 그대로 저장한다. 이 로컬 계획이 체크포인트 보존의 기준이며, `scripts/sync.mjs`는 이 전체 계획을 `{ eventId, plan }` envelope로 plan bridge에 전송하고, bridge의 성공 확인을 받지 못한 모든 경우에는 로컬 `plan-events.jsonl`에 보관한다. `start_coaching`의 서버 응답만으로 체크포인트가 서버에 등록됐다고 말하지 않는다.
+승인한 체크포인트의 ID·순서·제목·`description`은 `.rona/plan.json`에 먼저 그대로 저장한다. 이 로컬 계획이 체크포인트 보존의 기준이며, `sync_coaching_plan`은 이 전체 계획을 로컬 Support의 parser/registry 경계에 직접 전달한다. 이 도구를 사용할 수 없을 때만 `scripts/sync.mjs`가 같은 전체 계획을 `{ eventId, plan }` envelope로 plan bridge에 전송한다. `start_coaching`의 서버 응답만으로 체크포인트가 서버에 등록됐다고 말하지 않는다.
 
 온보딩에서는 Rona가 자료 수집·비교·초안·검증 준비를 먼저 수행한다는 점과 사용자가 업무상 정답·우선순위·공개 범위·최종 적합성을 판단한다는 점을 구분해 보여준다. 단계마다 실제 자료를 사용해 결과물을 바꾸고 통과 기준을 확인하며, 사용자가 승인한 뒤에만 첫 체크포인트 실행으로 들어간다. 체크포인트를 한 번에 여러 개 완료하지 않는다.
 
@@ -149,6 +151,8 @@ AI 활용법은 다음 중 하나일 때 실행 직전에 설명한다: 처음 �
 
 승인된 계획은 현재 작업 폴더의 `.rona/plan.json`에 schema version 1로 저장한다. 새 계획은 UUID v4 `planId`, `revision: 0`, 현재 ISO 8601 시각을 사용한다. 기존 계획을 바꾸면 `planId`와 `createdAt`을 유지하고 `revision`을 1 올린다.
 
+`workspace`에는 선택한 작업 폴더의 절대 경로를 저장한다. 사용자에게 보여줄 때만 workspace-relative 경로나 폴더 이름으로 줄인다. `requestKey`는 같은 시작 요청에서 유지하며 `.rona/plan.json`에 보관한 같은 전체 계획을 `sync_coaching_plan`으로 동기화한다.
+
 필수 필드는 다음과 같다.
 
 ```json
@@ -183,21 +187,27 @@ AI 활용법은 다음 중 하나일 때 실행 직전에 설명한다: 처음 �
 }
 ```
 
+`sessionRef`는 항상 `null`로 둔다. 정확한 세션 연결은 Rona Support가 관찰한 호출로만 기록한다.
+
 - `challengeId`는 `.rona/challenge.json`에서 확실히 확인한 UUID만 사용하고, 아니면 `null`로 둔다.
 - `engine`은 현재 에이전트에 따라 `claude` 또는 `codex`다.
 - `status`는 `active`, `paused`, `completed` 중 하나다.
 - `coachingPhase`는 새 코칭에서 필수이며 `onboarding`, `checkpoint`, `review`, `completed` 중 하나다. 작업 온보딩 전에는 `onboarding`, 현재 체크포인트 실행 중에는 `checkpoint`, 결과 검증을 보여주고 사용자 판단을 기다릴 때는 `review`, 서버 완료를 확인한 뒤에는 `completed`로 저장한다.
 - 새 계획의 모든 체크포인트는 방향 합의 단계에서부터 `행동(무엇을 할지) → 이유(왜 지금 하는지) → 실제 자료(무엇을 사용할지) → 통과 조건(무엇을 확인하면 끝인지)`을 담은 `description`이 필수다. 상태는 `pending`, `active`, `done` 중 하나이며 동시에 `active`인 항목은 최대 하나다. 승인한 체크포인트의 ID·배열 순서·제목·`description`은 이 파일에 그대로 보존한다.
+- 방향과 세부 계획은 진행 중에도 바꿀 수 있으며 변경 즉시 revision을 올려 진행표에 반영한다. 아직 시작하지 않은 체크포인트의 추가·삭제·순서·내용 변경은 현재 체크포인트의 검토 승인을 취소하지 않는다. 현재 체크포인트도 결과물과 통과 조건이 그대로인 표현·실행 방법 변경은 기존 검토 승인을 유지한다. 현재 결과물이나 통과 조건을 바꾸면 현재 체크포인트를 `checkpoint` 단계로 되돌려 검토만 다시 받고, 이미 `done`인 체크포인트의 ID·제목·`description`·상태는 조용히 덮어쓰지 않는다. 계획을 바꾸는 것과 체크포인트 경계를 넘는 것은 별개이므로, 변경 뒤에도 사용자 답변 한 번에는 체크포인트 하나만 넘긴다.
+- 체크포인트 전이와 계획 정의 변경은 한 스냅샷에 섞지 않는다. 계획 정의를 바꿔야 하면 checkpoint 상태를 유지한 새 revision으로 먼저 저장·동기화하고 변경된 결과를 다시 검토받는다. 그 승인 뒤 전이 스냅샷에서는 `revision`, `updatedAt`, `coachingPhase`, checkpoint 상태만 바꾸며 제목·결과물·완료 기준·용어·체크포인트 ID·순서·제목·`description`·연결 정보는 직전 수락본과 같게 둔다.
 - `glossary`는 선택 필드이며 최대 20개다. 각 항목은 `term`, `definition`, `analogy`, `introducedAt`을 가진다. `introducedAt`은 `onboarding` 또는 실제 체크포인트 ID다. 용어를 처음 설명한 뒤 항목을 추가하고 `revision`을 1 올려 저장·동기화한다.
 - `coachingId`와 `serverRevision`은 사용자에게 보여주지 않는 연결 정보다. 서버 도구를 쓸 수 없으면 각각 `null`, `0`으로 둔다.
 
-저장할 때마다 이 스킬 번들의 `scripts/sync.mjs`를 실행한다. 이 스크립트는 schema v1, `coachingPhase`, checkpoint ID의 형식·중복 여부·상태·제목·최대 500자 `description`을 검증한 뒤 `{ eventId, plan }` 전체 envelope를 localhost plan bridge에 POST한다. bridge의 HTTP 성공과 JSON `ok: true`·승인된 `reason`을 모두 확인하지 못한 모든 경우에는 같은 envelope를 Support 데이터 디렉터리의 `plan-events.jsonl`에 보관한다. 단, `checkpoint-approval-required`나 `checkpoint-transition-invalid`는 재전송할 네트워크 실패가 아니라 plan bridge가 거부한 전이이므로 오프라인 대기열에 넣지 않는다. 이때 현재 체크포인트의 검토 상태와 사용자의 최신 답변을 다시 확인하고, 자동 재시도하거나 다음 체크포인트를 먼저 실행하지 않는다. 따라서 체크포인트 ID·순서·제목·`description`은 `start_coaching` payload가 아니라 승인 후 저장한 `.rona/plan.json`과 이 plan sync 경계에서 보존된다.
+저장할 때마다 먼저 로컬 MCP의 `sync_coaching_plan`에 저장한 `.rona/plan.json` 전체를 전달한다. 이 도구를 사용할 수 없을 때만 이 스킬 번들의 `scripts/sync.mjs`를 실행한다. fallback 스크립트는 schema v1, `coachingPhase`, checkpoint ID의 형식·중복 여부·상태·제목·최대 500자 `description`을 검증한 뒤 `{ eventId, plan }` 전체 envelope를 localhost plan bridge에 POST한다. bridge의 HTTP 성공과 JSON `ok: true`·승인된 `reason`을 모두 확인하지 못한 모든 경우에는 같은 envelope를 Support 데이터 디렉터리의 `plan-events.jsonl`에 보관한다. 단, `checkpoint-approval-required`나 `checkpoint-transition-invalid`는 재전송할 네트워크 실패가 아니라 plan bridge가 거부한 전이이므로 오프라인 대기열에 넣지 않는다. 이때 현재 체크포인트의 검토 상태와 사용자의 최신 답변을 다시 확인하고, 자동 재시도하거나 다음 체크포인트를 먼저 실행하지 않는다. 따라서 체크포인트 ID·순서·제목·`description`은 `start_coaching` payload가 아니라 승인 후 저장한 `.rona/plan.json`과 이 plan sync 경계에서 보존된다.
+
+체크포인트 경계를 넘기기 위해 `userReviewed: true`나 `user_review` 증거를 기록하지 않는다. 두 값은 최종 결과물 전체 검토 뒤 완료 단계에서만 사용한다.
 
 ```sh
 node <스킬 폴더>/scripts/sync.mjs --file <작업 폴더>/.rona/plan.json
 ```
 
-동기화 실패는 로컬 저장이나 코칭을 막지 않는다. 자동 재시도를 반복하지 않는다.
+네트워크 문제로 fallback 로컬 대기열에 보관된 동기화 실패는 코칭을 막지 않는다. 반면 `sync_coaching_plan` 또는 plan bridge가 체크포인트 전이를 거부하면 다음 체크포인트로 넘어가지 않는다. 자동 재시도를 반복하지 않는다.
 
 ## 서버 쓰기 보류
 사용자 승인 뒤 native MCP 호출이 최우선이며 결과는 상호배타적이다. 서버가 수락하면 반환 상태만 반영하고 outbox를 만들지 않는다. MCP가 로컬 대기열 보관을 명시하면 같은 요청을 별도로 저장하지 않는다. 호출이 취소되거나 도구를 사용할 수 없거나 보관 여부를 확인할 수 없으면, 그 요청만 같은 안정적인 키로 `.rona/coach-outbox.json`에 보존한다. 인증정보, 결과물 원문, 대화 전문, 절대 경로는 넣지 않는다.
@@ -236,7 +246,7 @@ node <스킬 폴더>/scripts/sync.mjs --file <작업 폴더>/.rona/plan.json
 
 각 체크포인트는 학습 목차가 아니라 실제 결과물의 상태 변화다. 다음 여섯 개입을 순서대로 수행한다. 현재 체크포인트 안의 단순하거나 이미 익숙한 반복 작업은 짧게 묶을 수 있지만 서로 다른 체크포인트는 한 응답에 묶지 않으며 중요한 이유와 결과 검증도 생략하지 않는다.
 
-작업 온보딩을 마치면 `coachingPhase: checkpoint`로 revision을 올려 저장·동기화한 뒤 첫 체크포인트를 실행한다. 각 체크포인트의 실행과 검증 중에는 `checkpoint`를 유지한다. 결과 검증을 사용자에게 보여주기 직전에 `coachingPhase: review`로 revision을 올려 먼저 저장·동기화하고, 그 다음 승인·수정·중단 중 하나를 묻는다.
+작업 온보딩을 마치면 `coachingPhase: checkpoint`로 revision을 올려 저장·동기화한 뒤 첫 체크포인트를 실행한다. 각 체크포인트의 실행과 검증 중에는 `checkpoint`를 유지한다. 결과 검증을 사용자에게 보여주기 직전에 `coachingPhase: review`로 revision을 올려 먼저 저장·동기화하고, 그 다음 승인·수정·중단 중 하나를 묻는다. 재개한 체크포인트도 예외 없이 같은 순서를 지킨다.
 
 ### 1. 맥락 대비
 
@@ -256,9 +266,11 @@ node <스킬 폴더>/scripts/sync.mjs --file <작업 폴더>/.rona/plan.json
 
 ### 5. 이해와 방향 확인
 
-확인한 결과, 처음과 달라진 점, 선택한 방법의 이유와 남은 위험을 보여준다. 결과가 사용자의 업무 목적에 맞는지와 다음 단계로 가도 되는지 묻는다. 이해·승인 질문에는 예시 답변을 제시하지 않는다. `네` 또는 `계속`만으로 이해나 만족을 추정하지 않는다. 다만 모든 단계에서 설명을 되말하게 하지 않고, 결과 전체를 흔드는 판단이나 처음 접한 핵심 방법에서만 사용자가 자기 말로 설명하거나 승인·수정·중단을 선택하게 한다. 사용자가 멈춤·수정·방향 변경을 말하면 즉시 멈춰 현재 단계 재작업, 방향 재합의, 일시정지 중 하나를 선택하게 한다.
+확인한 결과, 처음과 달라진 점, 선택한 방법의 이유와 남은 위험을 보여준다. 결과가 사용자의 업무 목적에 맞는지와 다음 단계로 가도 되는지 묻는다. Claude Code에서 `AskUserQuestion`으로 묻는 체크포인트 승인 질문은 header를 `{현재 번호}단계 검토`, 승인 선택지를 정확히 `승인하고 다음 단계로`로 쓴다. 수정·보류 선택지에는 승인이나 다음 단계 의미를 섞지 않는다. 이해·승인 질문에는 예시 답변을 제시하지 않는다. `네` 또는 `계속`만으로 이해나 만족을 추정하지 않는다. 다만 모든 단계에서 설명을 되말하게 하지 않고, 결과 전체를 흔드는 판단이나 처음 접한 핵심 방법에서만 사용자가 자기 말로 설명하거나 승인·수정·중단을 선택하게 한다. 사용자가 멈춤·수정·방향 변경을 말하면 즉시 멈춰 현재 단계 재작업, 방향 재합의, 일시정지 중 하나를 선택하게 한다.
 
-사용자 승인 전에는 다음 체크포인트를 실행·완료·동기화하거나 그 결과를 제시하지 않으며, 먼저 실행한 뒤 소급 승인을 받지 않는다. 사용자 답변 한 번으로 체크포인트 하나만 넘긴다. 승인 시 현재 체크포인트만 `done`, 바로 다음 항목만 `active`로 바꾸고 `coachingPhase: checkpoint`로 revision을 올려 저장·동기화한다. 같은 답변으로 그 다음 체크포인트까지 완료하지 않는다. 수정 시 변경 이유를 반영해 같은 체크포인트에서 수정·재검증하고, 체크포인트 상태를 바꾸지 않은 새 revision의 `coachingPhase: review`를 먼저 저장·동기화한 뒤 다시 판단을 묻는다. 수정 뒤 이전 답변을 승인으로 재사용하지 않는다. 방향이나 판정 기준이 바뀌면 영향을 설명하고 결과물 정의, 남은 체크포인트와 검증 기준을 다시 명시적으로 합의한다.
+사용자 승인 전에는 다음 체크포인트를 실행·완료·동기화하거나 그 결과를 제시하지 않으며, 먼저 실행한 뒤 소급 승인을 받지 않는다. 사용자 답변 한 번으로 체크포인트 하나만 넘긴다. 승인 시 현재 체크포인트만 `done`으로 바꾸고, 다음 항목이 있으면 그 항목만 `active`로 바꾼다. 마지막 체크포인트라면 새 `active` 항목을 두지 않는다. 마지막 체크포인트 승인을 포함한 모든 체크포인트 전이에서는 최종 결과물 전체 검토 전까지 로컬 계획을 `status: active`, `coachingPhase: checkpoint`로 유지하고 revision을 올려 저장한 뒤, 저장한 **같은 전체 계획**과 `approvedCheckpointId`를 한 번의 `sync_coaching_plan` 호출로 보낸다. `sync_coaching_plan`을 사용할 수 없을 때만 `sync.mjs --file <계획 경로> --approve-checkpoint <승인한 현재 체크포인트 ID>`를 한 번 실행한다. 어느 경로든 승인 동기화 뒤 다른 sync helper를 다시 호출하지 않는다. `approvedCheckpointId`는 방금 사용자가 명시적으로 승인한 현재 체크포인트를 넘길 때만 사용하며 일반 계획 수정에는 사용하지 않는다. 승인 동기화가 거부되면 다음 체크포인트를 실행하지 않고 현재 체크포인트의 검토 상태를 다시 확인한다. 승인 동기화가 거부돼도 방금 저장한 전이 계획의 checkpoint 상태와 revision을 되돌리지 않고, 되돌린 새 revision을 서버에 동기화하지 않는다. 로컬 전이 계획을 그대로 보존하고 같은 체크포인트를 다시 승인받은 뒤 같은 전체 계획·revision·`approvedCheckpointId`를 재전송한다. 이때 `.rona/plan.json` 변경에는 `Write`·`Edit`·`apply_patch` 중 하나만 사용하고 `Bash`·`exec_command`·`node -e`를 사용하지 않는다. 계획 파일 저장과 동기화는 서로 다른 도구 호출로 분리한다. 셸 한 번에 계획 수정과 `sync.mjs` 실행을 묶지 않는다. 셸 호출은 저장이 끝난 뒤 `sync.mjs`만 단독 실행한다. 같은 답변으로 그 다음 체크포인트까지 완료하지 않는다. 수정 시 변경 이유를 반영해 같은 체크포인트에서 수정·재검증하고, 체크포인트 상태를 바꾸지 않은 새 revision의 `coachingPhase: review`를 먼저 저장·동기화한 뒤 다시 판단을 묻는다. 수정 뒤 이전 답변을 승인으로 재사용하지 않는다. 방향이나 판정 기준이 바뀌면 영향을 설명하고 결과물 정의, 남은 체크포인트와 검증 기준을 다시 명시적으로 합의한다.
+
+plan bridge가 전이를 거부하면 진행표는 실행 안전장치이므로 화면 표시 문제라고 축소하지 않는다. 서버 수락 전에는 다음 체크포인트를 실행하겠다고 제안하지 않고, 현재 검토 상태를 다시 동기화한 뒤 같은 체크포인트의 승인 질문으로 돌아간다.
 
 ### 6. 다음 행동 연결
 

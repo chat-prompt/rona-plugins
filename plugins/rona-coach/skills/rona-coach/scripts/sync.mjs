@@ -89,6 +89,8 @@ function appendOffline(dataDir, envelope) {
 
 export async function syncPlanFile(planPath, options = {}) {
   const plan = validatePlan(JSON.parse(readFileSync(planPath, 'utf8')));
+  const approvedCheckpointId = options.approvedCheckpointId;
+  if (approvedCheckpointId !== undefined && !CHECKPOINT_ID.test(approvedCheckpointId || '')) invalid();
   const envelope = { eventId: stableEventId(plan.planId, plan.revision), plan };
   const dataDir = options.dataDir || supportDataDirectory(options);
   const discovery = readDiscovery(dataDir);
@@ -96,7 +98,10 @@ export async function syncPlanFile(planPath, options = {}) {
     try {
       const response = await (options.fetch || fetch)(discovery.url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${discovery.token}` },
+        headers: {
+          'content-type': 'application/json', authorization: `Bearer ${discovery.token}`,
+          ...(approvedCheckpointId === undefined ? {} : { 'x-rona-approved-checkpoint': approvedCheckpointId }),
+        },
         body: JSON.stringify(envelope),
         signal: AbortSignal.timeout(2_000),
       });
@@ -109,26 +114,36 @@ export async function syncPlanFile(planPath, options = {}) {
       }
     } catch {}
   }
+  if (approvedCheckpointId !== undefined) {
+    return { synced: false, queued: false, rejected: true, reason: 'checkpoint-approval-support-required' };
+  }
   appendOffline(dataDir, envelope);
   return { synced: false, queued: true };
 }
 
 function arg(name) {
   const index = process.argv.indexOf(name);
-  return index >= 0 ? process.argv[index + 1] : null;
+  if (index < 0) return { present: false, value: undefined };
+  const value = process.argv[index + 1];
+  return { present: true, value: value && !value.startsWith('--') ? value : undefined };
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
-  const planPath = arg('--file');
-  if (!planPath) {
-    console.error('usage: sync.mjs --file <.rona/plan.json>');
+  const planArg = arg('--file');
+  const approvalArg = arg('--approve-checkpoint');
+  const planPath = planArg.value;
+  const approvedCheckpointId = approvalArg.value;
+  if (!planPath || (approvalArg.present && !approvedCheckpointId)) {
+    console.error('usage: sync.mjs --file <.rona/plan.json> [--approve-checkpoint <id>]');
     process.exitCode = 2;
   } else {
-    syncPlanFile(planPath)
+    syncPlanFile(planPath, { approvedCheckpointId })
       .then((result) => {
         if (result.rejected) {
-          console.error('현재 체크포인트의 검토와 사용자 답변을 다시 확인해 주세요.');
+          console.error(result.reason === 'checkpoint-approval-support-required'
+            ? 'Rona Support를 연 뒤 같은 체크포인트 승인을 다시 동기화해 주세요.'
+            : '현재 체크포인트의 검토와 사용자 답변을 다시 확인해 주세요.');
           process.exitCode = 1;
         } else console.log(result.synced ? 'Support와 동기화했어요.' : '로컬에 안전하게 보관했어요.');
       })
