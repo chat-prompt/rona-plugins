@@ -7,7 +7,7 @@ import test from 'node:test';
 const root = resolve(new URL('..', import.meta.url).pathname);
 const plugin = join(root, 'plugins', 'rona-coach');
 const supportSources = [
-  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '1f9650b79bf18176401f0ceae78d2515c94819ba05730bb7701adad6d1ed62b6'],
+  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', 'e526ba8af7613c73f7a76bdc82dd3809f84c10bede86c29309429cf4c5e38398'],
   ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', 'b96f34e88f210084d9e3f2c0478b122f88df8301852c8cf808bffbb3d93f7e82'],
 ];
 
@@ -86,7 +86,8 @@ test('skill implements native execution and excludes legacy generation tools', a
     '최종 결과물 전체 검증', '작업 과정 요약', 'AI 활용과 재사용 요약',
     'coaching_id', 'invalid-initial-plan',
   ]) assert.ok(skill.includes(anchor), `missing coaching contract: ${anchor}`);
-  assert.match(skill, /`네`[^\n]*`계속`[^\n]*(이해|만족)[^\n]*(추정하지|간주하지)/);
+  assert.match(skill, /특정 승인 문구를 그대로 입력하거나 복창하게 하지 않는다/);
+  assert.match(skill, /직전 질문이 다음 단계 진행 여부 하나였다면 `네`, `계속`, `좋아요`, `넘어가자`/);
   assert.match(sync, /syncPlanFile/);
 });
 
@@ -130,8 +131,8 @@ test('published descriptions and versions stay aligned', async () => {
   assert.match(skill, new RegExp(`^description: ${description}$`, 'm'));
   assert.equal(listing.version, manifest.version);
   assert.equal(mcp.mcpServers['rona-coach'].headers['X-Rona-Launcher-Version'], `coach-${manifest.version}`);
-  assert.equal(manifest.version, '0.1.7');
-  assert.equal(marketplace.metadata.version, '0.3.31');
+  assert.equal(manifest.version, '0.1.8');
+  assert.equal(marketplace.metadata.version, '0.3.32');
 });
 
 test('published coaching sources stay byte-identical to the Support source', async () => {
