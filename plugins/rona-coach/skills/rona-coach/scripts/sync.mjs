@@ -11,7 +11,11 @@ const STATES = new Set(['active', 'paused', 'completed']);
 const STEP_STATES = new Set(['pending', 'active', 'done']);
 const COACHING_PHASES = new Set(['onboarding', 'checkpoint', 'review', 'completed']);
 const ACKNOWLEDGED = new Set(['created', 'updated', 'duplicate', 'unchanged', 'stale']);
-const REJECTED = new Set(['checkpoint-approval-required', 'checkpoint-transition-invalid']);
+const REJECTED = new Set([
+  'checkpoint-approval-required', 'checkpoint-transition-invalid',
+  'coaching-phase-required', 'coaching-status-phase-mismatch',
+  'plan-session-untrusted', 'plan-identity-mismatch', 'invalid-initial-plan',
+]);
 
 function invalid() { throw new Error('invalid plan snapshot'); }
 function text(value, max) {
@@ -142,8 +146,8 @@ if (isMain) {
       .then((result) => {
         if (result.rejected) {
           console.error(result.reason === 'checkpoint-approval-support-required'
-            ? 'Rona Support를 연 뒤 같은 체크포인트 승인을 다시 동기화해 주세요.'
-            : '현재 체크포인트의 검토와 사용자 답변을 다시 확인해 주세요.');
+            ? 'Rona Support를 연 뒤 다시 동기화해 주세요.'
+            : `진행표 동기화가 거부됐어요: ${result.reason}`);
           process.exitCode = 1;
         } else console.log(result.synced ? 'Support와 동기화했어요.' : '로컬에 안전하게 보관했어요.');
       })
