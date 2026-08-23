@@ -128,13 +128,13 @@ description: 실제 업무 결과물을 만들고 검증하는 Rona 맞춤 코�
 
 진행 기록은 코칭을 보조한다. 아래 시점만 지키고 payload, 대기열, 재시도는 도구와 Support 런타임의 응답에 맡긴다.
 
-1. 전체 계획 승인 직후 `revision: 0`, `coachingId: null`인 `.rona/plan.json`을 저장하고 `sync_coaching_plan`으로 기록한 뒤 `start_coaching`을 호출한다. 반환된 `coaching_id`를 같은 계획의 `coachingId`에 넣고 revision을 정확히 1 올려 다시 저장한 다음, 그 계획을 즉시 `sync_coaching_plan`으로 보낸다. 이 연결 sync가 `applied: true`가 되기 전에는 첫 체크포인트를 실행하지 않는다. `start_coaching` 응답만 받고 다음 revision을 건너뛰지 않는다. native revision은 native 상태 갱신에만 사용한다. `revision_conflict`가 오면 최신 상태를 다시 읽고 달라진 내용을 사용자와 재합의한다.
+1. 전체 계획 승인 직후 `revision: 0`, `coachingId: null`인 `.rona/plan.json`을 저장하고 `sync_coaching_plan`으로 기록한 뒤 `start_coaching`을 호출한다. 반환된 `coaching_id`를 같은 계획의 `coachingId`에 넣고 revision을 정확히 1 올려 다시 저장한 다음, 그 계획을 즉시 `sync_coaching_plan`으로 보낸다. 이 연결 sync가 `applied: true`가 되기 전에는 첫 체크포인트를 실행하지 않는다. 연결할 때까지는 `coachingPhase: onboarding`과 전체 `pending` 상태를 유지한다. 사용자가 온보딩을 듣고 시작 의사를 보이면 `coachingPhase: checkpoint`로 바꾸고 첫 항목 하나만 `active`로 만든 뒤 저장·동기화하고 실행한다. `start_coaching` 응답만 받고 다음 revision을 건너뛰지 않는다. native revision은 native 상태 갱신에만 사용한다. `revision_conflict`가 오면 최신 상태를 다시 읽고 달라진 내용을 사용자와 재합의한다.
 2. 체크포인트 결과를 보여주고 사용자 판단을 묻는다.
 3. 진행 의사가 확인되면 현재 항목 하나만 `done`, 다음 항목 하나만 `active`로 바꿔 저장하고 `sync_coaching_plan`에 한 번 보낸다. 방향이나 이후 계획이 함께 바뀌었다면 같은 계획에 반영해도 된다.
 4. 결과 검증 뒤 `submit_coaching_artifact`와 `submit_coaching_evidence`로 요약과 검증 근거만 기록한다. 원문과 로컬 경로는 보내지 않는다.
 5. 최종 결과물 전체 검토 뒤에만 `userReviewed: true`를 기록하고 `complete_coaching`을 호출한다.
 
-새 계획은 schema version 1, UUID v4 `planId`, `revision: 0`, 현재 시각, 현재 `engine`, `sessionRef: null`, `status: active`, `coachingPhase: onboarding`을 사용한다. 체크포인트 상태는 `pending`, `active`, `done`이며 동시에 `active`는 최대 하나다. `workspace` 절대 경로와 연결 정보는 파일에만 저장하고 사용자에게 보여주지 않는다. 변경 시 `planId`와 `createdAt`을 유지하고 revision을 올린다.
+새 계획은 schema version 1, UUID v4 `planId`, `revision: 0`, 현재 시각, 현재 `engine`, `sessionRef: null`, `status: active`, `coachingPhase: onboarding`을 사용하며 체크포인트는 모두 `pending`으로 둔다. 사용자가 시작하기 전에는 항목을 `active`로 만들지 않는다. 체크포인트 상태는 `pending`, `active`, `done`이며 실행 중에는 `active`가 정확히 하나다. `workspace` 절대 경로와 연결 정보는 파일에만 저장하고 사용자에게 보여주지 않는다. 변경 시 `planId`와 `createdAt`을 유지하고 revision을 올린다.
 
 `sync_coaching_plan`을 사용할 수 없을 때만 별도 도구 호출로 `node <스킬 폴더>/scripts/sync.mjs --file <작업 폴더>/.rona/plan.json`을 한 번 실행한다. 계획 파일 저장과 동기화는 서로 다른 도구 호출로 분리한다.
 
@@ -148,4 +148,4 @@ description: 실제 업무 결과물을 만들고 검증하는 Rona 맞춤 코�
 
 결과물 요약에는 위치와 사용법, 시작 대비 변화, 완료 근거, 남은 한계를 담는다. 작업 과정 요약에는 실제 진행 순서, 중요한 판단, 검증, 실패와 복구를 담는다. AI 활용과 재사용 요약에는 AI에 맡긴 일, 사용자가 판단한 일, 사용한 방법과 이유·한계, 다음 유사 업무를 시작하는 최소 순서와 핵심 용어를 담는다.
 
-사용자의 최종 확인 뒤 `update_coaching_state`에 최종 학습 요약과 `userReviewed: true`를 기록하고 `complete_coaching`을 호출한다. 서버가 `completed`를 반환한 뒤에만 로컬 계획을 `status: completed`, `coachingPhase: completed`로 저장한다. 결과물만 있고 사용자가 방법을 이해하지 못했거나, 이해만 있고 실제 결과물이 없으면 완료가 아니다.
+사용자의 최종 확인 뒤 `update_coaching_state`에 최종 학습 요약과 `userReviewed: true`를 기록하고 `complete_coaching`을 호출한다. 서버가 `completed`를 반환한 뒤에만 로컬 계획을 `status: completed`, `coachingPhase: completed`로 바꾸고 revision을 정확히 1 올려 저장한 다음, 같은 전체 계획을 `sync_coaching_plan`으로 한 번 보내 `applied: true`를 확인한다. 네트워크 보류면 네이티브 완료는 유지하고 진행표 표시만 보류됐다고 알리며 `complete_coaching`을 다시 호출하지 않는다. 서버가 거부하면 정확한 사유를 한 번만 알린다. 결과물만 있고 사용자가 방법을 이해하지 못했거나, 이해만 있고 실제 결과물이 없으면 완료가 아니다.
