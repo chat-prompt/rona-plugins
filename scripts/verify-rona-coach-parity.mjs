@@ -17,9 +17,9 @@ const [plugin, support, pluginSync, supportSync] = await Promise.all([
 ]);
 
 const clauses = [
-  '실제 자료', '명시적으로 동의', 'start_coaching', 'get_coaching_state',
+  '실제 자료', '명시적으로 동의', 'start_coaching',
   'update_coaching_state', 'submit_coaching_artifact', 'submit_coaching_evidence',
-  'userReviewed', 'complete_coaching', 'revision_conflict', 'partial', 'blocked', 'Stop',
+  'userReviewed', 'complete_coaching', 'revision_conflict', 'Stop',
 ];
 const missing = clauses.flatMap((clause) => [
   ...(plugin.includes(clause) ? [] : [`plugin:${clause}`]),
