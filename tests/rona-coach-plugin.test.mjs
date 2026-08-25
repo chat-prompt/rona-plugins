@@ -7,7 +7,7 @@ import test from 'node:test';
 const root = resolve(new URL('..', import.meta.url).pathname);
 const plugin = join(root, 'plugins', 'rona-coach');
 const supportSources = [
-  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '6417fa53528120fdad46975da535720ee77705818d5695227327edbd77f61a02'],
+  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', 'e26f046b069ef9619a97a5d4dfbaf4e94c29e3a19086ad649b7628c09141645f'],
   ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', 'b96f34e88f210084d9e3f2c0478b122f88df8301852c8cf808bffbb3d93f7e82'],
 ];
 
@@ -132,8 +132,8 @@ test('published descriptions and versions stay aligned', async () => {
   assert.match(skill, new RegExp(`^description: ${description}$`, 'm'));
   assert.equal(listing.version, manifest.version);
   assert.equal(mcp.mcpServers['rona-coach'].headers['X-Rona-Launcher-Version'], `coach-${manifest.version}`);
-  assert.equal(manifest.version, '0.1.14');
-  assert.equal(marketplace.metadata.version, '0.3.38');
+  assert.equal(manifest.version, '0.1.15');
+  assert.equal(marketplace.metadata.version, '0.3.39');
 });
 
 test('published coaching sources stay byte-identical to the Support source', async () => {
