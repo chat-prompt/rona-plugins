@@ -1,7 +1,7 @@
 {
   "name": "rona-coach",
   "description": "실제 업무 결과물을 만들고 검증하는 Rona 맞춤 코칭",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "author": {
     "name": "Geniefy"
   },
