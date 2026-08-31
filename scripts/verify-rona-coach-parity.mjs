@@ -6,14 +6,20 @@ const pluginUrl = new URL('../plugins/rona-coach/skills/rona-coach/SKILL.md', im
 const supportTarget = process.env.RONA_SUPPORT_SKILL
   || new URL('../../rona-support/assets/rona-coach/SKILL.md', import.meta.url);
 const pluginSyncUrl = new URL('../plugins/rona-coach/skills/rona-coach/scripts/sync.mjs', import.meta.url);
+const pluginManifestUrl = new URL('../plugins/rona-coach/skills/rona-coach/manifest.json', import.meta.url);
 const supportSyncTarget = process.env.RONA_SUPPORT_SKILL
   ? resolve(dirname(process.env.RONA_SUPPORT_SKILL), 'scripts', 'sync.mjs')
   : new URL('../../rona-support/assets/rona-coach/scripts/sync.mjs', import.meta.url);
-const [plugin, support, pluginSync, supportSync] = await Promise.all([
+const supportManifestTarget = process.env.RONA_SUPPORT_SKILL
+  ? resolve(dirname(process.env.RONA_SUPPORT_SKILL), 'manifest.json')
+  : new URL('../../rona-support/assets/rona-coach/manifest.json', import.meta.url);
+const [plugin, support, pluginSync, supportSync, pluginManifest, supportManifest] = await Promise.all([
   readFile(pluginUrl, 'utf8'),
   readFile(supportTarget, 'utf8'),
   readFile(pluginSyncUrl, 'utf8'),
   readFile(supportSyncTarget, 'utf8'),
+  readFile(pluginManifestUrl, 'utf8'),
+  readFile(supportManifestTarget, 'utf8'),
 ]);
 
 const clauses = [
@@ -28,9 +34,9 @@ const missing = clauses.flatMap((clause) => [
 if (missing.length) {
   console.error(`로나 코칭 계약 불일치: ${missing.join(', ')}`);
   process.exitCode = 1;
-} else if (plugin !== support || pluginSync !== supportSync) {
+} else if (plugin !== support || pluginSync !== supportSync || pluginManifest !== supportManifest) {
   console.error('로나 코칭 배포본이 Support 정본과 바이트 단위로 다릅니다.');
   process.exitCode = 1;
 } else {
-  console.log('로나 코칭 Skill과 동기화 helper가 plugin과 Support에서 완전히 같습니다.');
+  console.log('로나 코칭 Skill, 버전 manifest와 동기화 helper가 plugin과 Support에서 완전히 같습니다.');
 }

@@ -7,8 +7,9 @@ import test from 'node:test';
 const root = resolve(new URL('..', import.meta.url).pathname);
 const plugin = join(root, 'plugins', 'rona-coach');
 const supportSources = [
-  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', 'e26f046b069ef9619a97a5d4dfbaf4e94c29e3a19086ad649b7628c09141645f'],
+  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '7b1f1973fa58be8705477888e809d2cb2bb4f0964da1ab14463b205175ea8566'],
   ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', 'b96f34e88f210084d9e3f2c0478b122f88df8301852c8cf808bffbb3d93f7e82'],
+  ['skills/rona-coach/manifest.json', 'assets/rona-coach/manifest.json', 'e58777f119ad5d270965c63d241506fa4120f163a71d22ca1832ceb7e729bfda'],
 ];
 
 async function text(path) { return readFile(path, 'utf8'); }
@@ -124,6 +125,7 @@ test('published descriptions and versions stay aligned', async () => {
   const marketplace = JSON.parse(await text(join(root, '.claude-plugin', 'marketplace.json')));
   const listing = marketplace.plugins.find((item) => item.name === 'rona-coach');
   const manifest = JSON.parse(await text(join(plugin, '.claude-plugin', 'plugin.json')));
+  const bundleManifest = JSON.parse(await text(join(plugin, 'skills', 'rona-coach', 'manifest.json')));
   const mcp = JSON.parse(await text(join(plugin, '.mcp.json')));
   const skill = await text(join(plugin, 'skills', 'rona-coach', 'SKILL.md'));
 
@@ -131,9 +133,11 @@ test('published descriptions and versions stay aligned', async () => {
   assert.equal(manifest.description, description);
   assert.match(skill, new RegExp(`^description: ${description}$`, 'm'));
   assert.equal(listing.version, manifest.version);
+  assert.equal(bundleManifest.name, 'rona-coach');
+  assert.equal(bundleManifest.version, manifest.version);
   assert.equal(mcp.mcpServers['rona-coach'].headers['X-Rona-Launcher-Version'], `coach-${manifest.version}`);
-  assert.equal(manifest.version, '0.1.15');
-  assert.equal(marketplace.metadata.version, '0.3.39');
+  assert.equal(manifest.version, '0.1.16');
+  assert.equal(marketplace.metadata.version, '0.3.40');
 });
 
 test('published coaching sources stay byte-identical to the Support source', async () => {
