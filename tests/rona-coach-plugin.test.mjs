@@ -7,9 +7,11 @@ import test from 'node:test';
 const root = resolve(new URL('..', import.meta.url).pathname);
 const plugin = join(root, 'plugins', 'rona-coach');
 const supportSources = [
-  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '7b1f1973fa58be8705477888e809d2cb2bb4f0964da1ab14463b205175ea8566'],
+  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '270ee0dec4bca7c49f1094b6dfac378aac07f033ff305fb766ce2b20cff56891'],
+  ['skills/rona-coach/references/review.md', 'assets/rona-coach/references/review.md', '925c2c59143a4cd9bf22764d64bcc6a4f8ab1d096077653349e6491c3ccee2f6'],
+  ['skills/rona-review/SKILL.md', 'assets/rona-review/SKILL.md', '69eb39f129a4677abdaad375d5225292695bc77b6e2b9b4e9488ac9809c5980d'],
   ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', 'b96f34e88f210084d9e3f2c0478b122f88df8301852c8cf808bffbb3d93f7e82'],
-  ['skills/rona-coach/manifest.json', 'assets/rona-coach/manifest.json', 'e58777f119ad5d270965c63d241506fa4120f163a71d22ca1832ceb7e729bfda'],
+  ['skills/rona-coach/manifest.json', 'assets/rona-coach/manifest.json', '2d7dc02f4526511586f9c8f014c82ffc3ca1ec74f9d0dc20a0087889f8f9c97e'],
 ];
 
 async function text(path) { return readFile(path, 'utf8'); }
@@ -93,6 +95,14 @@ test('skill implements native execution and excludes legacy generation tools', a
   assert.match(sync, /syncPlanFile/);
 });
 
+test('standalone review skill is bundled beside coaching and reuses its review contract', async () => {
+  const review = await text(join(plugin, 'skills', 'rona-review', 'SKILL.md'));
+  assert.match(review, /^name: rona-review$/m);
+  assert.match(review, /status: completed/);
+  assert.match(review, /\.\.\/rona-coach\/references\/review\.md/);
+  assert.match(review, /결과물을 수정하지 않는다/);
+});
+
 test('published coaching starts with purpose and does not interview for available time', async () => {
   const skill = await text(join(plugin, 'skills', 'rona-coach', 'SKILL.md'));
   const start = skill.split('## 시작과 재개')[1]?.split('## 맥락 인터뷰')[0] || '';
@@ -136,8 +146,8 @@ test('published descriptions and versions stay aligned', async () => {
   assert.equal(bundleManifest.name, 'rona-coach');
   assert.equal(bundleManifest.version, manifest.version);
   assert.equal(mcp.mcpServers['rona-coach'].headers['X-Rona-Launcher-Version'], `coach-${manifest.version}`);
-  assert.equal(manifest.version, '0.1.16');
-  assert.equal(marketplace.metadata.version, '0.3.40');
+  assert.equal(manifest.version, '0.1.17');
+  assert.equal(marketplace.metadata.version, '0.3.41');
 });
 
 test('published coaching sources stay byte-identical to the Support source', async () => {
