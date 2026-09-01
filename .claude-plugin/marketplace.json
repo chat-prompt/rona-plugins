@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Rona 맞춤 AI 코칭 런처 마켓플레이스",
-    "version": "0.3.41"
+    "version": "0.3.42"
   },
   "plugins": [
     {
@@ -31,7 +31,7 @@
       "name": "rona-coach",
       "source": "./plugins/rona-coach",
       "description": "실제 업무 결과물을 만들고 검증하는 Rona 맞춤 코칭",
-      "version": "0.1.17",
+      "version": "0.1.18",
       "author": {
         "name": "Geniefy"
       }
