@@ -8,9 +8,10 @@ const root = resolve(new URL('..', import.meta.url).pathname);
 const plugin = join(root, 'plugins', 'rona-coach');
 const supportSources = [
   ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '270ee0dec4bca7c49f1094b6dfac378aac07f033ff305fb766ce2b20cff56891'],
-  ['skills/rona-coach/references/review.md', 'assets/rona-coach/references/review.md', '925c2c59143a4cd9bf22764d64bcc6a4f8ab1d096077653349e6491c3ccee2f6'],
+  ['skills/rona-coach/references/review.md', 'assets/rona-coach/references/review.md', '5cd4dc4575b0d9a296c34207805b0c79e064ab290831c2f0936de371fca80362'],
   ['skills/rona-review/SKILL.md', 'assets/rona-review/SKILL.md', '69eb39f129a4677abdaad375d5225292695bc77b6e2b9b4e9488ac9809c5980d'],
   ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', 'b96f34e88f210084d9e3f2c0478b122f88df8301852c8cf808bffbb3d93f7e82'],
+  ['skills/rona-coach/scripts/mask-review.mjs', 'assets/rona-coach/scripts/mask-review.mjs', '48e7cd0eaf6c8c43b4cbb1995ba5cb1fc78f28c1564696616522eb6bdaf1fd28'],
   ['skills/rona-coach/manifest.json', 'assets/rona-coach/manifest.json', '2d7dc02f4526511586f9c8f014c82ffc3ca1ec74f9d0dc20a0087889f8f9c97e'],
 ];
 
