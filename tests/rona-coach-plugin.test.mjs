@@ -7,12 +7,12 @@ import test from 'node:test';
 const root = resolve(new URL('..', import.meta.url).pathname);
 const plugin = join(root, 'plugins', 'rona-coach');
 const supportSources = [
-  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '270ee0dec4bca7c49f1094b6dfac378aac07f033ff305fb766ce2b20cff56891'],
+  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', 'ae988e20b21ae9536577c446441288afb972b94a57a21b2bf537567ebba4cadc'],
   ['skills/rona-coach/references/review.md', 'assets/rona-coach/references/review.md', '5cd4dc4575b0d9a296c34207805b0c79e064ab290831c2f0936de371fca80362'],
   ['skills/rona-review/SKILL.md', 'assets/rona-review/SKILL.md', '69eb39f129a4677abdaad375d5225292695bc77b6e2b9b4e9488ac9809c5980d'],
-  ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', 'b96f34e88f210084d9e3f2c0478b122f88df8301852c8cf808bffbb3d93f7e82'],
+  ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', '95f88ca9e068f16272ca1e9b36e94e1c1ea6825b4071e99abf9422f78a89b9a6'],
   ['skills/rona-coach/scripts/mask-review.mjs', 'assets/rona-coach/scripts/mask-review.mjs', '48e7cd0eaf6c8c43b4cbb1995ba5cb1fc78f28c1564696616522eb6bdaf1fd28'],
-  ['skills/rona-coach/manifest.json', 'assets/rona-coach/manifest.json', '7118f9be4cb19374d24df3a9c7135cdb6306bfcb8806d0ce6f4ab4978d2c0db6'],
+  ['skills/rona-coach/manifest.json', 'assets/rona-coach/manifest.json', '456a03badbcdcab3efd53ea38712c76c2ec15b42b8d7f48eebda374d592e9900'],
 ];
 
 async function text(path) { return readFile(path, 'utf8'); }
@@ -147,8 +147,8 @@ test('published descriptions and versions stay aligned', async () => {
   assert.equal(bundleManifest.name, 'rona-coach');
   assert.equal(bundleManifest.version, manifest.version);
   assert.equal(mcp.mcpServers['rona-coach'].headers['X-Rona-Launcher-Version'], `coach-${manifest.version}`);
-  assert.equal(manifest.version, '0.1.18');
-  assert.equal(marketplace.metadata.version, '0.3.42');
+  assert.equal(manifest.version, '0.1.19');
+  assert.equal(marketplace.metadata.version, '0.3.43');
 });
 
 test('published coaching sources stay byte-identical to the Support source', async () => {
