@@ -146,10 +146,10 @@ if (isMain) {
       .then((result) => {
         if (result.rejected) {
           console.error(result.reason === 'checkpoint-approval-support-required'
-            ? 'Rona Support를 연 뒤 다시 동기화해 주세요.'
+            ? 'Rona Coach를 연 뒤 다시 동기화해 주세요.'
             : `진행표 동기화가 거부됐어요: ${result.reason}`);
           process.exitCode = 1;
-        } else console.log(result.synced ? 'Support와 동기화했어요.' : '로컬에 안전하게 보관했어요.');
+        } else console.log(result.synced ? 'Rona Coach와 동기화했어요.' : '로컬에 안전하게 보관했어요.');
       })
       .catch(() => { console.error('실행 계획 파일을 확인하지 못했어요.'); process.exitCode = 1; });
   }
