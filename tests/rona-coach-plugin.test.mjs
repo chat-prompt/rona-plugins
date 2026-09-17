@@ -7,12 +7,12 @@ import test from 'node:test';
 const root = resolve(new URL('..', import.meta.url).pathname);
 const plugin = join(root, 'plugins', 'rona-coach');
 const supportSources = [
-  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', 'ae988e20b21ae9536577c446441288afb972b94a57a21b2bf537567ebba4cadc'],
+  ['skills/rona-coach/SKILL.md', 'assets/rona-coach/SKILL.md', '343ebb7829bc31b417647764a301b88e7583715f9fbaa597c2a669fa8f791473'],
   ['skills/rona-coach/references/review.md', 'assets/rona-coach/references/review.md', '5cd4dc4575b0d9a296c34207805b0c79e064ab290831c2f0936de371fca80362'],
   ['skills/rona-review/SKILL.md', 'assets/rona-review/SKILL.md', '69eb39f129a4677abdaad375d5225292695bc77b6e2b9b4e9488ac9809c5980d'],
-  ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', '95f88ca9e068f16272ca1e9b36e94e1c1ea6825b4071e99abf9422f78a89b9a6'],
+  ['skills/rona-coach/scripts/sync.mjs', 'assets/rona-coach/scripts/sync.mjs', '6e6aefb00ac1bcf903e82f09148b683a3cc8d0702457e6002fa7364cf92c2384'],
   ['skills/rona-coach/scripts/mask-review.mjs', 'assets/rona-coach/scripts/mask-review.mjs', '48e7cd0eaf6c8c43b4cbb1995ba5cb1fc78f28c1564696616522eb6bdaf1fd28'],
-  ['skills/rona-coach/manifest.json', 'assets/rona-coach/manifest.json', '456a03badbcdcab3efd53ea38712c76c2ec15b42b8d7f48eebda374d592e9900'],
+  ['skills/rona-coach/manifest.json', 'assets/rona-coach/manifest.json', '8cfc19a7540253ca139e7f9395d534d72b3012548637177ceca8b3744fe02748'],
 ];
 
 async function text(path) { return readFile(path, 'utf8'); }
@@ -86,7 +86,8 @@ test('skill implements native execution and excludes legacy generation tools', a
     '서로 다른 체크포인트를 한 응답에 묶지', 'description', '보충 설명',
     '가벼운 탐색', '업무 이해 1/4', '재료와 환경 2/4',
     '결과물과 사용 장면 3/4', '완료와 설명 수준 4/4',
-    '승인 뒤 작업 온보딩', '이번에 만들 것', '행동 → 이유 → 실제 자료 → 통과 조건',
+    '사용자가 한 번에 검토하는 계획 본문', '이번에 만들 것', '행동 → 이유 → 실제 자료 → 통과 조건',
+    '추천 방식', '추천 이유', 'Rona가 할 일', '사용자가 준비하거나 판단할 일',
     '최종 결과물 전체 검증', '작업 과정 요약', 'AI 활용과 재사용 요약',
     'coaching_id', 'invalid-initial-plan',
     '업무 역할', '업무의 숙련도', 'AI 활용 경험', '사용자가 판단할 것과 확인 방법',
@@ -147,8 +148,8 @@ test('published descriptions and versions stay aligned', async () => {
   assert.equal(bundleManifest.name, 'rona-coach');
   assert.equal(bundleManifest.version, manifest.version);
   assert.equal(mcp.mcpServers['rona-coach'].headers['X-Rona-Launcher-Version'], `coach-${manifest.version}`);
-  assert.equal(manifest.version, '0.1.19');
-  assert.equal(marketplace.metadata.version, '0.3.43');
+  assert.equal(manifest.version, '0.1.21');
+  assert.equal(marketplace.metadata.version, '0.3.44');
 });
 
 test('published coaching sources stay byte-identical to the Support source', async () => {
