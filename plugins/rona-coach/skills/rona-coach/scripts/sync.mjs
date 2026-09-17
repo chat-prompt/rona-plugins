@@ -15,6 +15,7 @@ const REJECTED = new Set([
   'checkpoint-approval-required', 'checkpoint-transition-invalid',
   'coaching-phase-required', 'coaching-status-phase-mismatch',
   'plan-session-untrusted', 'plan-identity-mismatch', 'invalid-initial-plan',
+  'coaching-completed', 'coaching-state-required',
 ]);
 
 function invalid() { throw new Error('invalid plan snapshot'); }
@@ -25,10 +26,13 @@ function text(value, max) {
 function validatePlan(value) {
   if (!value || value.schemaVersion !== 1 || !UUID.test(value.planId || '')
     || (value.challengeId !== null && !UUID.test(value.challengeId || ''))
+    || (value.coachingId != null && !UUID.test(value.coachingId || ''))
     || !STATES.has(value.status)
     || (value.engine !== null && !['claude', 'codex'].includes(value.engine))
     || (value.sessionRef !== null && !/^[A-Za-z0-9._~-]{16,128}$/.test(value.sessionRef || ''))
     || (value.coachingPhase !== undefined && !COACHING_PHASES.has(value.coachingPhase))
+    || (value.serverRevision !== undefined
+      && (!Number.isInteger(value.serverRevision) || value.serverRevision < 0 || value.serverRevision > 100_000))
     || !Number.isInteger(value.revision) || value.revision < 0
     || !Array.isArray(value.checkpoints) || value.checkpoints.length > 100
     || !Number.isFinite(Date.parse(value.createdAt)) || !Number.isFinite(Date.parse(value.updatedAt))) invalid();

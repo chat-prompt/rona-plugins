@@ -6,7 +6,13 @@
 
 세 플러그인은 독립적으로 설치되며 서로의 명령, 설정, 파일을 덮어쓰지 않습니다. `rona-coach`는 원격 MCP의 OAuth 연결을 사용하고, 결과물 원문이나 로컬 경로 대신 목표·방향·결과물 요약·검증 증거만 서버에 저장합니다.
 
-Support 번들과 핵심 행동 계약이 맞는지 확인하려면 Rona 저장소들이 같은 상위 폴더에 있을 때 다음을 실행합니다.
+Support 번들을 정본으로 플러그인 배포본을 동기화한 뒤 검증하려면 Rona 저장소들이 같은 상위 폴더에 있을 때 다음을 실행합니다.
+
+```sh
+node scripts/verify-rona-coach-parity.mjs --sync
+```
+
+파일을 변경하지 않고 두 배포본이 같은지만 확인하려면 다음을 실행합니다.
 
 ```sh
 node scripts/verify-rona-coach-parity.mjs

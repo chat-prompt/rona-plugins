@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
 const pluginUrl = new URL('../plugins/rona-coach/skills/rona-coach/SKILL.md', import.meta.url);
@@ -25,6 +25,25 @@ const supportReviewTarget = process.env.RONA_SUPPORT_SKILL
 const supportReviewSkillTarget = process.env.RONA_SUPPORT_SKILL
   ? resolve(dirname(process.env.RONA_SUPPORT_SKILL), '..', 'rona-review', 'SKILL.md')
   : new URL('../../rona-support/assets/rona-review/SKILL.md', import.meta.url);
+const sourcePairs = [
+  [supportTarget, pluginUrl],
+  [supportSyncTarget, pluginSyncUrl],
+  [supportReviewMaskTarget, pluginReviewMaskUrl],
+  [supportManifestTarget, pluginManifestUrl],
+  [supportReviewTarget, pluginReviewUrl],
+  [supportReviewSkillTarget, pluginReviewSkillUrl],
+];
+
+const unknownArgs = process.argv.slice(2).filter((arg) => arg !== '--sync');
+if (unknownArgs.length) {
+  console.error(`알 수 없는 옵션: ${unknownArgs.join(', ')}`);
+  process.exit(1);
+}
+if (process.argv.includes('--sync')) {
+  const supportFiles = await Promise.all(sourcePairs.map(([supportFile]) => readFile(supportFile)));
+  await Promise.all(sourcePairs.map(([, pluginFile], index) => writeFile(pluginFile, supportFiles[index])));
+  console.log('Support 정본을 rona-coach 플러그인 배포본에 동기화했습니다.');
+}
 const [plugin, support, pluginSync, supportSync, pluginReviewMask, supportReviewMask, pluginManifest, supportManifest, pluginReview, supportReview, pluginReviewSkill, supportReviewSkill] = await Promise.all([
   readFile(pluginUrl, 'utf8'),
   readFile(supportTarget, 'utf8'),
